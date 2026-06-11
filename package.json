@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "API de gestion logistique pour traiteur (recettes, matériel, inventaire, commandes)",
   "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
