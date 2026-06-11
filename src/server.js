@@ -32,4 +32,6 @@ app.use((err, _req, res, _next) => {
 });
 
 const port = process.env.PORT || 8080;
-app.listen(port, () => console.log(`API traiteur en écoute sur http://localhost:${port}`));
+app.listen(port, '0.0.0.0', () => {
+  console.log(`API traiteur en écoute sur le port ${port}`);
+});
