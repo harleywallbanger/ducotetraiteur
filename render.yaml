@@ -1,0 +1,36 @@
+# Blueprint de déploiement Render — Du Côté Traiteur (API + PostgreSQL)
+# Doc : https://render.com/docs/blueprint-spec
+#
+# IMPORTANT — initialisation de la base :
+#   `npm run init-db` RÉINITIALISE le schéma (DROP SCHEMA public CASCADE) et efface
+#   les données. Il n'est donc PAS lancé automatiquement au déploiement.
+#   À exécuter UNE SEULE FOIS après le premier déploiement, via le Shell Render :
+#       npm run init-db
+#   (à ne jamais relancer sur une base contenant de vraies données).
+
+services:
+  - type: web
+    name: ducote-traiteur-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ducote-traiteur-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true        # secret généré par Render, jamais en clair dans le repo
+      - key: NODE_VERSION
+        value: "20"
+
+databases:
+  - name: ducote-traiteur-db
+    plan: free
+    region: frankfurt
+    databaseName: traiteur
+    user: postgres
