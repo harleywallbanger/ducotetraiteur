@@ -31,5 +31,5 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Erreur serveur' });
 });
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`API traiteur en écoute sur http://localhost:${port}`));
