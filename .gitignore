@@ -1,0 +1,11 @@
+# Dépendances
+node_modules/
+
+# Secrets / config locale — NE JAMAIS committer
+.env
+.env.*
+!.env.example
+
+# Logs & divers
+*.log
+.DS_Store
