@@ -42,12 +42,9 @@ npm run init-db               # crée le schéma, les données et les comptes d�
 npm start                     # API sur http://localhost:3000
 ```
 
-Comptes de démonstration créés par `init-db` :
-
-| Rôle        | Email               | Mot de passe |
-|-------------|---------------------|--------------|
-| Manager     | marc@traiteur.fr    | manager123   |
-| Préparateur | paul@traiteur.fr    | prepa123     |
+`init-db` crée deux comptes de démonstration (un **manager** et un **préparateur**).
+Les identifiants ne sont **pas** publiés ici : ils sont fournis séparément et doivent
+être changés (mot de passe) avant toute exposition publique de l'API.
 
 ## Modèle de données (logique clé)
 
@@ -122,7 +119,7 @@ Connexion :
 ```bash
 curl -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"marc@traiteur.fr","mot_de_passe":"manager123"}'
+  -d '{"email":"<email>","mot_de_passe":"<mot_de_passe>"}'
 ```
 
 Calendrier de juin :

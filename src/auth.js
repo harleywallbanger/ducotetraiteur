@@ -2,7 +2,8 @@ require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const SECRET = process.env.JWT_SECRET || 'dev-secret-a-changer';
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) throw new Error('JWT_SECRET manquant — refus de démarrer');
 
 const hashPassword    = (clair)      => bcrypt.hash(clair, 10);
 const comparePassword = (clair, hash) => bcrypt.compare(clair, hash);
