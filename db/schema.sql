@@ -25,7 +25,7 @@ DROP TYPE IF EXISTS mode_echelle      CASCADE;
 DROP TYPE IF EXISTS role_utilisateur  CASCADE;
 
 -- ---------- UTILISATEURS ----------
-CREATE TYPE role_utilisateur AS ENUM ('manager', 'preparateur');
+CREATE TYPE role_utilisateur AS ENUM ('admin', 'manager', 'chef', 'cuisinier', 'preparateur');
 
 CREATE TABLE utilisateurs (
     id            BIGSERIAL PRIMARY KEY,
@@ -33,6 +33,7 @@ CREATE TABLE utilisateurs (
     email         TEXT             NOT NULL UNIQUE,
     mot_de_passe  TEXT             NOT NULL,           -- toujours stocké hashé
     role          role_utilisateur NOT NULL DEFAULT 'preparateur',
+    bloque        BOOLEAN          NOT NULL DEFAULT false,
     cree_le       TIMESTAMPTZ      NOT NULL DEFAULT now()
 );
 

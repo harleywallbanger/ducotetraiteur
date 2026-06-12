@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { pool } = require('../db');
-const { requireManager } = require('../auth');
+const { requireManager, requireRecipeEditor } = require('../auth');
 const ah = require('../ah');
 
 // Liste des commandes (pour le calendrier), filtrable par période ?from=&to=
@@ -106,7 +106,7 @@ router.delete('/:id', requireManager, ah(async (req, res) => {
 
 // ----- Ajustements manuels (override d'une quantité OU ajout d'un extra) -----
 // Matériel
-router.put('/:id/materiel/:materielId', requireManager, ah(async (req, res) => {
+router.put('/:id/materiel/:materielId', requireRecipeEditor, ah(async (req, res) => {
   const { quantite } = req.body || {};
   if (quantite == null) return res.status(400).json({ error: 'quantite requise' });
   await pool.query(
@@ -118,7 +118,7 @@ router.put('/:id/materiel/:materielId', requireManager, ah(async (req, res) => {
 }));
 
 // Retirer l'ajustement (retour au calcul auto, ou suppression de l'extra)
-router.delete('/:id/materiel/:materielId', requireManager, ah(async (req, res) => {
+router.delete('/:id/materiel/:materielId', requireRecipeEditor, ah(async (req, res) => {
   await pool.query(
     'DELETE FROM commande_materiels_ajust WHERE commande_id = $1 AND materiel_id = $2',
     [req.params.id, req.params.materielId]);
@@ -126,7 +126,7 @@ router.delete('/:id/materiel/:materielId', requireManager, ah(async (req, res) =
 }));
 
 // Cuisine
-router.put('/:id/cuisine/:ingredientId', requireManager, ah(async (req, res) => {
+router.put('/:id/cuisine/:ingredientId', requireRecipeEditor, ah(async (req, res) => {
   const { quantite } = req.body || {};
   if (quantite == null) return res.status(400).json({ error: 'quantite requise' });
   await pool.query(
@@ -137,7 +137,7 @@ router.put('/:id/cuisine/:ingredientId', requireManager, ah(async (req, res) => 
   res.json({ ok: true });
 }));
 
-router.delete('/:id/cuisine/:ingredientId', requireManager, ah(async (req, res) => {
+router.delete('/:id/cuisine/:ingredientId', requireRecipeEditor, ah(async (req, res) => {
   await pool.query(
     'DELETE FROM commande_ingredients_ajust WHERE commande_id = $1 AND ingredient_id = $2',
     [req.params.id, req.params.ingredientId]);

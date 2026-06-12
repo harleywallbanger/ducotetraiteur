@@ -14,6 +14,8 @@ router.post('/login', ah(async (req, res) => {
   if (!u || !(await comparePassword(mot_de_passe, u.mot_de_passe)))
     return res.status(401).json({ error: 'Identifiants incorrects' });
 
+  if (u.bloque) return res.status(403).json({ error: 'Compte bloqué' });
+
   res.json({
     token: signToken(u),
     utilisateur: { id: u.id, nom: u.nom, email: u.email, role: u.role },

@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { pool } = require('../db');
-const { requireManager } = require('../auth');
+const { requireRecipeEditor } = require('../auth');
 const ah = require('../ah');
 
 // Liste des recettes
@@ -45,7 +45,7 @@ async function insertLignes(client, recetteId, ingredients = [], materiels = [])
 }
 
 // Créer une recette
-router.post('/', requireManager, ah(async (req, res) => {
+router.post('/', requireRecipeEditor, ah(async (req, res) => {
   const { nom, description = null, portion_base = 10, ingredients = [], materiels = [] } = req.body || {};
   if (!nom) return res.status(400).json({ error: 'nom requis' });
   const client = await pool.connect();
@@ -66,7 +66,7 @@ router.post('/', requireManager, ah(async (req, res) => {
 }));
 
 // Modifier une recette (remplace ses lignes)
-router.put('/:id', requireManager, ah(async (req, res) => {
+router.put('/:id', requireRecipeEditor, ah(async (req, res) => {
   const { nom, description = null, portion_base = 10, ingredients = [], materiels = [] } = req.body || {};
   const client = await pool.connect();
   try {
@@ -89,7 +89,7 @@ router.put('/:id', requireManager, ah(async (req, res) => {
 }));
 
 // Supprimer une recette
-router.delete('/:id', requireManager, ah(async (req, res) => {
+router.delete('/:id', requireRecipeEditor, ah(async (req, res) => {
   const { rowCount } = await pool.query('DELETE FROM recettes WHERE id = $1', [req.params.id]);
   if (!rowCount) return res.status(404).json({ error: 'Recette introuvable' });
   res.status(204).end();

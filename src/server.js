@@ -19,6 +19,7 @@ app.use('/api/auth', require('./routes/auth'));
 
 // Tout le reste exige un jeton valide
 app.use('/api', authMiddleware);
+app.use('/api/utilisateurs', require('./routes/utilisateurs'));
 app.use('/api/recettes',  require('./routes/recettes'));
 app.use('/api/commandes', require('./routes/commandes'));
 app.use('/api',           require('./routes/catalogue')); // /api/ingredients, /api/materiels, /api/inventaire, /api/alertes

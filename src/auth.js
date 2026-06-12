@@ -31,4 +31,18 @@ function requireManager(req, res, next) {
   next();
 }
 
-module.exports = { hashPassword, comparePassword, signToken, authMiddleware, requireManager };
+// Réserve une route à l'édition des recettes/ajustements (gérant ou chef)
+function requireRecipeEditor(req, res, next) {
+  if (!req.user || !['manager', 'chef'].includes(req.user.role))
+    return res.status(403).json({ error: "Action réservée au gérant ou au chef" });
+  next();
+}
+
+// Réserve une route à la gestion des comptes (admin ou gérant)
+function requireAccountManager(req, res, next) {
+  if (!req.user || !['admin', 'manager'].includes(req.user.role))
+    return res.status(403).json({ error: "Action réservée à l'admin ou au gérant" });
+  next();
+}
+
+module.exports = { hashPassword, comparePassword, signToken, authMiddleware, requireManager, requireRecipeEditor, requireAccountManager };
