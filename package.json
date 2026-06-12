@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "init-db": "node db/init.js"
+    "init-db": "node db/init.js",
+    "create-admin": "node db/create-admin.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
