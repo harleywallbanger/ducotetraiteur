@@ -3,8 +3,26 @@
 --  Lancé par `npm run init-db` (qui réinitialise le schéma public).
 -- ============================================================
 
-DROP SCHEMA IF EXISTS public CASCADE;
-CREATE SCHEMA public;
+-- Réinitialisation compatible PostgreSQL managé.
+-- (On évite « DROP SCHEMA public », qui exige d'être propriétaire du schéma —
+--  ce que l'utilisateur d'un add-on managé n'est pas.)
+-- On supprime directement les objets : le CASCADE sur les tables emporte les vues qui en dépendent.
+DROP TABLE IF EXISTS
+    commande_ingredients_ajust,
+    commande_materiels_ajust,
+    commande_recettes,
+    commandes,
+    inventaire,
+    recette_materiels,
+    recette_ingredients,
+    recettes,
+    materiels,
+    ingredients,
+    utilisateurs
+CASCADE;
+
+DROP TYPE IF EXISTS mode_echelle      CASCADE;
+DROP TYPE IF EXISTS role_utilisateur  CASCADE;
 
 -- ---------- UTILISATEURS ----------
 CREATE TYPE role_utilisateur AS ENUM ('manager', 'preparateur');
