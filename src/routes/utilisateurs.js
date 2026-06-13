@@ -47,6 +47,17 @@ router.put('/:id/blocage', ah(async (req, res) => {
   res.json(rows[0]);
 }));
 
+// Réinitialiser le mot de passe d'un compte (par l'admin/gérant)
+router.put('/:id/motdepasse', ah(async (req, res) => {
+  const { mot_de_passe } = req.body || {};
+  if (!mot_de_passe || String(mot_de_passe).length < 8)
+    return res.status(400).json({ error: 'Mot de passe trop court (8 caractères min)' });
+  const hash = await hashPassword(mot_de_passe);
+  const { rows } = await pool.query('UPDATE utilisateurs SET mot_de_passe=$1 WHERE id=$2 RETURNING id, nom, email, role, bloque', [hash, Number(req.params.id)]);
+  if (!rows[0]) return res.status(404).json({ error: 'Utilisateur introuvable' });
+  res.json(rows[0]);
+}));
+
 // Supprimer un compte
 router.delete('/:id', ah(async (req, res) => {
   if (String(req.user.id) === String(req.params.id))

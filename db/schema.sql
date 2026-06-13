@@ -92,12 +92,15 @@ CREATE TABLE inventaire (
 
 -- ---------- COMMANDES ----------
 CREATE TABLE commandes (
-    id         BIGSERIAL PRIMARY KEY,
-    client     TEXT,
-    date_event DATE        NOT NULL,
-    notes      TEXT,
-    cree_par   BIGINT      REFERENCES utilisateurs(id),
-    cree_le    TIMESTAMPTZ NOT NULL DEFAULT now()
+    id          BIGSERIAL PRIMARY KEY,
+    client      TEXT,
+    date_event  DATE        NOT NULL,
+    notes       TEXT,
+    adresse     TEXT,
+    contact_nom TEXT,
+    contact_tel TEXT,
+    cree_par    BIGINT      REFERENCES utilisateurs(id),
+    cree_le     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE commande_recettes (
