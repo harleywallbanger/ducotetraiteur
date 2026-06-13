@@ -296,7 +296,7 @@ function renderCommandes(){
     <div class="tickets" id="cmdList"><div class="state">Chargement…</div></div>`;
   const reload=()=>{cmdRange.from=$("fFrom").value;cmdRange.to=$("fTo").value;loadCmdList();};
   $("fFrom").addEventListener("change",reload);$("fTo").addEventListener("change",reload);
-  if(canOps())$("newCmd").addEventListener("click",openNewCommande);
+  if(canOps())$("newCmd").addEventListener("click",()=>openCommandeForm(null));
   loadCmdList();
 }
 async function loadCmdList(){
@@ -349,7 +349,7 @@ function renderCommandeDetail(c){
       <h4>Recettes</h4>
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Couverts</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
-      ${canOps()?`<div style="margin-top:20px"><button class="btn danger sm" id="delCmd">Supprimer la commande</button></div>`:""}
+      ${canOps()?`<div style="margin-top:20px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
     </div>`;
   if(editable){
     $("modal").querySelectorAll("input[data-mat]").forEach(inp=>inp.addEventListener("change",()=>adjust(c.id,"materiel",inp.dataset.mat,inp.value)));
@@ -363,35 +363,43 @@ function renderCommandeDetail(c){
     $("modal").querySelectorAll("#cuiItems .check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[c.id].add(k);else prepDone[c.id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
     refresh();
   }
-  if(canOps())$("delCmd").addEventListener("click",()=>deleteCommande(c.id));
+  if(canOps()){$("editCmd").addEventListener("click",()=>openCommandeForm(c));$("delCmd").addEventListener("click",()=>deleteCommande(c.id));}
 }
 
-async function openNewCommande(){
+async function openCommandeForm(existing){
+  const edit=!!existing;
   let recettes=[];try{recettes=await api("/api/recettes");}catch(e){toast(e.message,true);return;}
+  if(!recettes.length){toast("Aucune recette. Créez-en d'abord.",true);return;}
   const opts=recettes.map(r=>`<option value="${r.id}">${esc(r.nom)}</option>`).join("");
-  openModal(`<div class="modal-head"><div><h3>Nouvelle commande</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
+  const dval=edit&&existing.date_event?String(existing.date_event).slice(0,10):"";
+  openModal(`<div class="modal-head"><div><h3>${edit?"Modifier la commande":"Nouvelle commande"}</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="field"><label>Client</label><input id="ncClient" placeholder="Nom du client / événement"></div>
-      <div class="field"><label>Date de l'événement</label><input id="ncDate" type="date" required></div>
-      <div class="field"><label>Nombre de couverts (total)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50" value="50"></div>
-      <div class="field"><label>Notes (optionnel)</label><textarea id="ncNotes" placeholder="Allergies, horaire de livraison…"></textarea></div>
+      <div class="field"><label>Client</label><input id="ncClient" placeholder="Nom du client / événement" value="${edit&&existing.client?esc(existing.client):""}"></div>
+      <div class="field"><label>Date de l'événement</label><input id="ncDate" type="date" required value="${dval}"></div>
+      <div class="field"><label>Nombre de couverts (total)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50"${edit?"":' value="50"'}></div>
+      <div class="field"><label>Notes (optionnel)</label><textarea id="ncNotes" placeholder="Allergies, horaire de livraison…">${edit&&existing.notes?esc(existing.notes):""}</textarea></div>
       <h4>Recettes &amp; couverts</h4><div id="ncLines"></div>
       <button class="btn ghost sm" id="ncAdd" style="margin:4px 0 16px">+ Ajouter une recette</button>
-      <button class="btn full" id="ncSave"><span class="spin"></span><span class="label">Créer la commande</span></button>
+      <button class="btn full" id="ncSave"><span class="spin"></span><span class="label">${edit?"Enregistrer les modifications":"Créer la commande"}</span></button>
       <div class="msg err" id="ncMsg"></div>
     </div>`);
   const box=$("ncLines");
   const couvVal=()=>{const v=Number($("ncCouverts").value);return v>0?v:10;};
-  function addLine(){if(!recettes.length){toast("Aucune recette. Créez-en d'abord.",true);return;}const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${opts}</select><input class="qty" type="number" min="1" value="${couvVal()}"><button class="rm">×</button>`;r.querySelector(".rm").addEventListener("click",()=>r.remove());box.appendChild(r);}
-  addLine();$("ncAdd").addEventListener("click",addLine);
+  function addLine(rid,qty){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${opts}</select><input class="qty" type="number" min="1" value="${qty!=null?esc(qty):couvVal()}"><button class="rm">×</button>`;if(rid!=null)r.querySelector("select").value=rid;r.querySelector(".rm").addEventListener("click",()=>r.remove());box.appendChild(r);}
+  if(edit&&(existing.lignes||[]).length)existing.lignes.forEach(l=>addLine(l.recette_id,l.nb_personnes));else addLine();
+  $("ncAdd").addEventListener("click",()=>addLine());
   $("ncCouverts").addEventListener("input",()=>{const v=couvVal();box.querySelectorAll(".line-row .qty").forEach(i=>i.value=v);});
   $("ncSave").addEventListener("click",async()=>{
     const m=$("ncMsg");m.classList.remove("show");const date_event=$("ncDate").value;
-    const lignes=[...box.querySelectorAll(".line-row")].map(r=>({recette_id:Number(r.querySelector("select").value),nb_personnes:Number(r.querySelector("input").value)})).filter(l=>l.recette_id&&l.nb_personnes>0);
+    const lignes=[...box.querySelectorAll(".line-row")].map(r=>({recette_id:Number(r.querySelector("select").value),nb_personnes:Number(r.querySelector(".qty").value)})).filter(l=>l.recette_id&&l.nb_personnes>0);
     if(!date_event||!lignes.length){m.textContent="Une date et au moins une recette sont requises.";m.classList.add("show");return;}
     const btn=$("ncSave");btn.classList.add("loading");btn.disabled=true;
-    try{await api("/api/commandes",{method:"POST",body:{client:$("ncClient").value.trim()||null,date_event,notes:$("ncNotes").value.trim()||null,lignes}});closeModal();toast("Commande créée.");loadCmdList();}
-    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+    const body={client:$("ncClient").value.trim()||null,date_event,notes:$("ncNotes").value.trim()||null,lignes};
+    try{
+      if(edit)await api(`/api/commandes/${existing.id}`,{method:"PUT",body});
+      else await api("/api/commandes",{method:"POST",body});
+      closeModal();toast(edit?"Commande modifiée.":"Commande créée.");loadCmdList();
+    }catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }
 
