@@ -47,15 +47,15 @@ router.get('/:id', ah(async (req, res) => {
 
 // Créer une commande
 router.post('/', requireManager, ah(async (req, res) => {
-  const { client: clientNom, date_event, notes = null, adresse = null, contact_nom = null, contact_tel = null, lignes = [] } = req.body || {};
+  const { client: clientNom, date_event, notes = null, adresse = null, lieu_descriptif = null, contact_nom = null, contact_tel = null, lignes = [] } = req.body || {};
   if (!date_event || !lignes.length)
     return res.status(400).json({ error: 'date_event et au moins une recette requis' });
   const cx = await pool.connect();
   try {
     await cx.query('BEGIN');
     const { rows } = await cx.query(
-      'INSERT INTO commandes (client, date_event, notes, adresse, contact_nom, contact_tel, cree_par) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-      [clientNom, date_event, notes, adresse, contact_nom, contact_tel, req.user.id]);
+      'INSERT INTO commandes (client, date_event, notes, adresse, lieu_descriptif, contact_nom, contact_tel, cree_par) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [clientNom, date_event, notes, adresse, lieu_descriptif, contact_nom, contact_tel, req.user.id]);
     for (const l of lignes)
       await cx.query(
         'INSERT INTO commande_recettes (commande_id, recette_id, nb_personnes) VALUES ($1, $2, $3)',
