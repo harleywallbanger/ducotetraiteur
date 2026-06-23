@@ -38,6 +38,19 @@ app.use((err, _req, res, _next) => {
 });
 
 const port = process.env.PORT || 8080;
-app.listen(port, '0.0.0.0', () => {
-  console.log(`API traiteur en écoute sur le port ${port}`);
-});
+const { pool: _migPool } = require('./db');
+(async () => {
+  for (const sql of [
+    'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS adresse text',
+    'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS lieu_descriptif text',
+    'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS contact_nom text',
+    'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS contact_tel text',
+  ]) {
+    try { await _migPool.query(sql); }
+    catch (e) { console.error('Migration colonne:', e.message); }
+  }
+  console.log('Migration colonnes commandes : terminee');
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`API traiteur en écoute sur le port ${port}`);
+  });
+})();
