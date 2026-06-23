@@ -190,7 +190,7 @@
 <div class="app" id="app">
   <header class="topbar">
     <div class="wordmark"><span class="dot"></span><b>Du Côté Traiteur</b></div>
-    <div class="who"><span id="hello">Bonjour</span><span class="role-chip" id="role">—</span><button class="logout" id="logoutBtn">Se déconnecter</button></div>
+    <div class="who"><span id="hello">Bonjour</span><span class="role-chip" id="role">—</span><button class="logout" id="myPwdBtn">Mon mot de passe</button><button class="logout" id="logoutBtn">Se déconnecter</button></div>
   </header>
   <nav class="tabs" id="tabs"></nav>
   <main id="content"></main>
@@ -264,6 +264,22 @@ $("loginForm").addEventListener("submit",async(e)=>{
 });
 function logout(){session={token:null,user:null};store.del("dct_token");store.del("dct_user");$("app").classList.remove("show");$("login").style.display="grid";$("loginForm").reset();$("loginMsg").classList.remove("show");closeModal();}
 $("logoutBtn").addEventListener("click",logout);
+$("myPwdBtn").addEventListener("click",openMyPwd);
+function openMyPwd(){
+  openModal(`<div class="modal-head"><div><h3>Mon mot de passe</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Mot de passe actuel</label><input id="mpOld" type="password" autocomplete="current-password"></div>
+      <div class="field"><label>Nouveau mot de passe</label><input id="mpNew" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div>
+      <button class="btn full" id="mpSave"><span class="spin"></span><span class="label">Changer mon mot de passe</span></button>
+      <div class="msg err" id="mpMsg"></div></div>`);
+  $("mpSave").addEventListener("click",async()=>{
+    const m=$("mpMsg");m.classList.remove("show");const ancien=$("mpOld").value,nouveau=$("mpNew").value;
+    if(!nouveau||nouveau.length<8){m.textContent="Le nouveau mot de passe doit faire au moins 8 caractères.";m.classList.add("show");return;}
+    const btn=$("mpSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api("/api/moi/motdepasse",{method:"PUT",body:{ancien,nouveau}});closeModal();toast("Mot de passe changé.");}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 
 function enterApp(){
   const u=session.user||{};
@@ -342,10 +358,12 @@ function renderCommandeDetail(c){
   }
   const sections=cuisineFirst?(cuiSection()+(showMateriel?matSection():"")):((showMateriel?matSection():"")+cuiSection());
   const notesBox=c.notes?`<div style="background:var(--juste-bg);border:1px solid rgba(185,130,28,.35);border-left:4px solid var(--juste);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:14.5px"><b style="display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#7E5A12;margin-bottom:4px">Notes</b>${esc(c.notes)}</div>`:"";
+  const ficheBox=(c.adresse||c.contact_nom||c.contact_tel||c.lieu_descriptif)?`<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;line-height:1.8">${c.adresse?`📍 ${esc(c.adresse)}<br>`:""}${c.lieu_descriptif?`🏛 ${esc(c.lieu_descriptif)}<br>`:""}${(c.contact_nom||c.contact_tel)?`👤 ${esc(c.contact_nom||"")}${c.contact_tel?` · ☎ <a href="tel:${esc(c.contact_tel)}" style="color:var(--bottle-2)">${esc(c.contact_tel)}</a>`:""}`:""}</div>`:"";
   $("modal").innerHTML=`
     <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${notesBox}
+      ${ficheBox}
       <h4>Recettes</h4>
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Couverts</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
@@ -370,6 +388,7 @@ async function openCommandeForm(existing){
   const edit=!!existing;
   let recettes=[];try{recettes=await api("/api/recettes");}catch(e){toast(e.message,true);return;}
   if(!recettes.length){toast("Aucune recette. Créez-en d'abord.",true);return;}
+  let lieux=[];try{lieux=await api("/api/lieux");}catch(_){lieux=[];}
   const opts=recettes.map(r=>`<option value="${r.id}">${esc(r.nom)}</option>`).join("");
   const dval=edit&&existing.date_event?String(existing.date_event).slice(0,10):"";
   openModal(`<div class="modal-head"><div><h3>${edit?"Modifier la commande":"Nouvelle commande"}</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
@@ -377,6 +396,11 @@ async function openCommandeForm(existing){
       <div class="field"><label>Client</label><input id="ncClient" placeholder="Nom du client / événement" value="${edit&&existing.client?esc(existing.client):""}"></div>
       <div class="field"><label>Date de l'événement</label><input id="ncDate" type="date" required value="${dval}"></div>
       <div class="field"><label>Nombre de couverts (total)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50"${edit?"":' value="50"'}></div>
+      ${lieux.length?`<div class="field"><label>Lieu déjà utilisé (optionnel)</label><select id="ncLieu"><option value="">— Nouveau lieu —</option>${lieux.map((l,i)=>`<option value="${i}">${esc(l.adresse)}</option>`).join("")}</select></div>`:""}
+      <div class="field"><label>Adresse de l'événement</label><input id="ncAdresse" placeholder="Lieu / adresse complète" value="${edit&&existing.adresse?esc(existing.adresse):""}"></div>
+      <div class="field"><label>Descriptif du lieu (équipements, accès…)</label><textarea id="ncLieuDesc" placeholder="Ex. cuisine équipée, bar avec tirage pression tête plate, accès par carte magnétique…">${edit&&existing.lieu_descriptif?esc(existing.lieu_descriptif):""}</textarea></div>
+      <div class="field"><label>Contact sur place — nom</label><input id="ncContactNom" placeholder="Nom du contact" value="${edit&&existing.contact_nom?esc(existing.contact_nom):""}"></div>
+      <div class="field"><label>Contact sur place — téléphone</label><input id="ncContactTel" placeholder="06…" value="${edit&&existing.contact_tel?esc(existing.contact_tel):""}"></div>
       <div class="field"><label>Notes (optionnel)</label><textarea id="ncNotes" placeholder="Allergies, horaire de livraison…">${edit&&existing.notes?esc(existing.notes):""}</textarea></div>
       <h4>Recettes &amp; couverts</h4><div id="ncLines"></div>
       <button class="btn ghost sm" id="ncAdd" style="margin:4px 0 16px">+ Ajouter une recette</button>
@@ -389,12 +413,13 @@ async function openCommandeForm(existing){
   if(edit&&(existing.lignes||[]).length)existing.lignes.forEach(l=>addLine(l.recette_id,l.nb_personnes));else addLine();
   $("ncAdd").addEventListener("click",()=>addLine());
   $("ncCouverts").addEventListener("input",()=>{const v=couvVal();box.querySelectorAll(".line-row .qty").forEach(i=>i.value=v);});
+  if($("ncLieu"))$("ncLieu").addEventListener("change",()=>{const i=$("ncLieu").value;if(i==="")return;const l=lieux[Number(i)];if(!l)return;$("ncAdresse").value=l.adresse||"";$("ncLieuDesc").value=l.lieu_descriptif||"";$("ncContactNom").value=l.contact_nom||"";$("ncContactTel").value=l.contact_tel||"";});
   $("ncSave").addEventListener("click",async()=>{
     const m=$("ncMsg");m.classList.remove("show");const date_event=$("ncDate").value;
     const lignes=[...box.querySelectorAll(".line-row")].map(r=>({recette_id:Number(r.querySelector("select").value),nb_personnes:Number(r.querySelector(".qty").value)})).filter(l=>l.recette_id&&l.nb_personnes>0);
     if(!date_event||!lignes.length){m.textContent="Une date et au moins une recette sont requises.";m.classList.add("show");return;}
     const btn=$("ncSave");btn.classList.add("loading");btn.disabled=true;
-    const body={client:$("ncClient").value.trim()||null,date_event,notes:$("ncNotes").value.trim()||null,lignes};
+    const body={client:$("ncClient").value.trim()||null,date_event,notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lignes};
     try{
       if(edit)await api(`/api/commandes/${existing.id}`,{method:"PUT",body});
       else await api("/api/commandes",{method:"POST",body});
@@ -508,10 +533,11 @@ async function loadUsers(){
   try{
     const list=await api("/api/utilisateurs");
     const rows=list.map(u=>{const me=u.id===session.user.id;const blocked=!!u.bloque;
-      return `<tr class="${blocked?"alert":""}"><td>${esc(u.nom)}${me?` <span class="pill">vous</span>`:""}</td><td>${esc(u.email)}</td><td>${ROLE_LABEL[u.role]||esc(u.role)}</td><td>${blocked?`<span class="pill pill-alert">bloqué</span>`:`<span class="status s-ok"><span class="pip"></span>actif</span>`}</td><td>${me?"":`<button class="btn ghost sm" data-block="${u.id}" data-b="${blocked?1:0}" data-nom="${esc(u.nom)}">${blocked?"Débloquer":"Bloquer"}</button> <button class="btn danger sm" data-del="${u.id}" data-nom="${esc(u.nom)}">Supprimer</button>`}</td></tr>`;}).join("")||`<tr><td colspan="5">Aucun utilisateur</td></tr>`;
+      return `<tr class="${blocked?"alert":""}"><td>${esc(u.nom)}${me?` <span class="pill">vous</span>`:""}</td><td>${esc(u.email)}</td><td>${ROLE_LABEL[u.role]||esc(u.role)}</td><td>${blocked?`<span class="pill pill-alert">bloqué</span>`:`<span class="status s-ok"><span class="pip"></span>actif</span>`}</td><td>${me?"":`<button class="btn ghost sm" data-block="${u.id}" data-b="${blocked?1:0}" data-nom="${esc(u.nom)}">${blocked?"Débloquer":"Bloquer"}</button> `}<button class="btn ghost sm" data-pwd="${u.id}" data-nom="${esc(u.nom)}">Mot de passe</button>${me?"":` <button class="btn danger sm" data-del="${u.id}" data-nom="${esc(u.nom)}">Supprimer</button>`}</td></tr>`;}).join("")||`<tr><td colspan="5">Aucun utilisateur</td></tr>`;
     box.innerHTML=`<table class="grid"><thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>État</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
     box.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>delUser(b.dataset.del,b.dataset.nom)));
     box.querySelectorAll("[data-block]").forEach(b=>b.addEventListener("click",()=>blockUser(b.dataset.block,b.dataset.b==="1",b.dataset.nom)));
+    box.querySelectorAll("[data-pwd]").forEach(b=>b.addEventListener("click",()=>openPwd(b.dataset.pwd,b.dataset.nom)));
   }catch(e){box.innerHTML=`<div class="state"><b>Accès indisponible</b>${esc(e.message)}</div>`;}
 }
 function openNewUser(){
@@ -534,6 +560,20 @@ function openNewUser(){
 }
 async function delUser(id,nom){if(!confirm(`Supprimer définitivement le compte de ${nom} ?`))return;try{await api(`/api/utilisateurs/${id}`,{method:"DELETE"});toast("Compte supprimé.");loadUsers();}catch(e){toast(e.message,true);}}
 async function blockUser(id,blocked,nom){try{await api(`/api/utilisateurs/${id}/blocage`,{method:"PUT",body:{bloque:!blocked}});toast(blocked?"Compte débloqué.":"Compte bloqué.");loadUsers();}catch(e){toast(e.message,true);}}
+function openPwd(id,nom){
+  openModal(`<div class="modal-head"><div><h3>Mot de passe</h3><div class="meta">${esc(nom)}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nouveau mot de passe</label><input id="pwNew" type="text" placeholder="À communiquer à la personne"></div>
+      <button class="btn full" id="pwSave"><span class="spin"></span><span class="label">Enregistrer le mot de passe</span></button>
+      <div class="msg err" id="pwMsg"></div></div>`);
+  $("pwSave").addEventListener("click",async()=>{
+    const m=$("pwMsg");m.classList.remove("show");const mot_de_passe=$("pwNew").value;
+    if(!mot_de_passe||mot_de_passe.length<8){m.textContent="Mot de passe trop court (8 caractères minimum).";m.classList.add("show");return;}
+    const btn=$("pwSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(`/api/utilisateurs/${id}/motdepasse`,{method:"PUT",body:{mot_de_passe}});closeModal();toast("Mot de passe mis à jour.");}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 
 /* ---------- PRÉPARATION (mobile, coches locales) ---------- */
 const prepDone={}; // {commandeId: Set(itemKey)} — local à la session

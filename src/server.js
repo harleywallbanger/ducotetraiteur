@@ -22,6 +22,7 @@ app.use('/api', authMiddleware);
 app.use('/api/utilisateurs', require('./routes/utilisateurs'));
 app.use('/api/recettes',  require('./routes/recettes'));
 app.use('/api/commandes', require('./routes/commandes'));
+app.use('/api/lieux',     require('./routes/lieux'));
 app.use('/api',           require('./routes/catalogue')); // /api/ingredients, /api/materiels, /api/inventaire, /api/alertes
 
 // 404
