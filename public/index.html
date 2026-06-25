@@ -222,6 +222,7 @@ const ALLERG_LABEL=Object.fromEntries(ALLERGENES);
 const allergKeys=(s)=>s?String(s).split(",").map(x=>x.trim()).filter(Boolean):[];
 const TABS=[
   {id:"commandes",label:"Commandes",roles:["admin","manager","chef","cuisinier"]},
+  {id:"clients",label:"Clients",roles:["admin","manager"]},
   {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef","preparateur"]},
   {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier"]},
   {id:"admin",label:"Administration",roles:["admin","manager"]},
@@ -298,7 +299,7 @@ function enterApp(){
 $("tabs").addEventListener("click",(e)=>{const b=e.target.closest("button[data-view]");if(b)switchView(b.dataset.view);});
 function switchView(view){
   [...$("tabs").children].forEach(b=>b.classList.toggle("active",b.dataset.view===view));
-  ({commandes:renderCommandes,stock:renderStock,recettes:renderRecettes,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+  ({commandes:renderCommandes,clients:renderClients,stock:renderStock,recettes:renderRecettes,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
 }
 
 /* ---------- helpers ---------- */
@@ -321,7 +322,7 @@ function renderCommandes(){
   loadCmdList();
 }
 async function loadCmdList(){
-  const box=$("cmdList");box.innerHTML=`<div class="state">Chargement…</div>`;
+  const box=$("cmdList");if(!box)return;box.innerHTML=`<div class="state">Chargement…</div>`;
   try{
     const list=await api(`/api/commandes?from=${cmdRange.from}&to=${cmdRange.to}`);
     if(!list.length){box.innerHTML=`<div class="state"><b>Aucune commande</b>Rien sur cette période.</div>`;return;}
@@ -329,6 +330,38 @@ async function loadCmdList(){
       return `<button class="ticket" data-id="${c.id}"><div class="t-date"><div class="d">${d}</div><div class="m">${mo}</div></div><div class="t-title">${esc(c.client||"Sans client")}</div><div class="t-covers">${cv!=null?`<b>${fmtN(cv)}</b> pers.`:""}</div><div class="t-status">${statusChip(c.statut)}</div></button>`;}).join("");
     box.querySelectorAll(".ticket").forEach(t=>t.addEventListener("click",()=>openCommande(t.dataset.id)));
   }catch(e){box.innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
+}
+/* ---------- CLIENTS (carnet) ---------- */
+async function renderClients(){
+  $("content").innerHTML=`<div class="head"><h2>Clients</h2><div class="tools"><input type="search" id="cliSearch" placeholder="Rechercher un client…" style="font:inherit;font-size:14px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;min-width:220px"></div></div><div id="cliBox"><div class="state">Chargement…</div></div>`;
+  let clients=[];
+  try{clients=await api("/api/clients");}catch(e){$("cliBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;return;}
+  const render=(q)=>{
+    const f=(q||"").trim().toLowerCase();
+    const list=clients.filter(c=>!f||[c.client||"",c.client_tel||"",c.client_email||""].join(" ").toLowerCase().includes(f));
+    if(!list.length){$("cliBox").innerHTML=`<div class="state"><b>Aucun client</b>${clients.length?"Aucun résultat pour cette recherche.":"Les clients apparaîtront ici dès la première commande enregistrée."}</div>`;return;}
+    $("cliBox").innerHTML=`<table class="grid"><thead><tr><th>Client</th><th>Téléphone</th><th>E-mail</th><th></th></tr></thead><tbody>${list.map((c,i)=>`<tr><td><b>${esc(c.client||"—")}</b></td><td>${esc(c.client_tel||"—")}</td><td>${esc(c.client_email||"—")}</td><td><button class="btn ghost sm" data-i="${i}">Ouvrir</button></td></tr>`).join("")}</tbody></table>`;
+    $("cliBox").querySelectorAll("[data-i]").forEach(b=>b.addEventListener("click",()=>openClient(list[Number(b.dataset.i)])));
+  };
+  render("");
+  $("cliSearch").addEventListener("input",()=>render($("cliSearch").value));
+}
+async function openClient(c){
+  const sub=[c.client_tel?`☎ ${esc(c.client_tel)}`:"",c.client_email?esc(c.client_email):""].filter(Boolean).join(" · ")||"—";
+  openModal(`<div class="modal-head"><div><h3>${esc(c.client||"Client")}</h3><div class="meta">${sub}</div></div><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body"><div class="state">Chargement…</div></div>`);
+  try{
+    const all=await api(`/api/commandes?from=2000-01-01&to=2100-01-01`);
+    const mine=all.filter(x=>(x.client||"")===(c.client||""));
+    const rows=mine.length?mine.map(x=>{const dt=parseDate(x.date_event);const ds=dt?dt.toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"}):"—";const cv=num(x.couverts);return `<tr><td>${esc(ds)}</td><td class="num">${cv!=null?fmtN(cv)+" pers.":"—"}</td><td><button class="btn ghost sm" data-cid="${x.id}">Ouvrir</button></td></tr>`;}).join(""):`<tr><td colspan="3">Aucune commande pour ce client.</td></tr>`;
+    $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(c.client||"Client")}</h3><div class="meta">${sub}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+      <div class="modal-body">
+        ${canOps()?`<button class="btn sm" id="cliNew" style="margin-bottom:16px">+ Nouvelle commande pour ce client</button>`:""}
+        <h4>Commandes (${mine.length})</h4>
+        <table class="grid"><thead><tr><th>Date</th><th class="num">Personnes</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>`;
+    $("modal").querySelectorAll("[data-cid]").forEach(b=>b.addEventListener("click",()=>openCommande(b.dataset.cid)));
+    if($("cliNew"))$("cliNew").addEventListener("click",()=>openCommandeForm(null,{client:c.client,client_tel:c.client_tel,client_email:c.client_email}));
+  }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
 }
 async function openCommande(id){
   openModal(`<div class="modal-head"><div><h3>Commande</h3></div><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body"><div class="state">Chargement…</div></div>`);
@@ -564,7 +597,7 @@ function renderCommandeDetail(c){
   if($("btnRetour"))$("btnRetour").addEventListener("click",()=>openRetour(c,()=>openCommande(c.id)));
 }
 
-async function openCommandeForm(existing){
+async function openCommandeForm(existing,prefill){
   const edit=!!existing;
   let recettes=[];try{recettes=await api("/api/recettes");}catch(e){toast(e.message,true);return;}
   if(!recettes.length){toast("Aucune recette. Créez-en d'abord.",true);return;}
@@ -578,9 +611,9 @@ async function openCommandeForm(existing){
   openModal(`<div class="modal-head"><div><h3>${edit?"Modifier la commande":"Nouvelle commande"}</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${clients.length?`<div class="field"><label>Client déjà connu (optionnel)</label><select id="ncClientSel"><option value="">— Nouveau client —</option>${clients.map((c,i)=>`<option value="${i}">${esc(c.client)}</option>`).join("")}</select></div>`:""}
-      <div class="field"><label>Client</label><input id="ncClient" placeholder="Nom du client / événement" value="${edit&&existing.client?esc(existing.client):""}"></div>
-      <div class="field"><label>Client — téléphone</label><input id="ncClientTel" placeholder="06…" value="${edit&&existing.client_tel?esc(existing.client_tel):""}"></div>
-      <div class="field"><label>Client — e-mail</label><input id="ncClientEmail" type="email" placeholder="client@exemple.fr" value="${edit&&existing.client_email?esc(existing.client_email):""}"></div>
+      <div class="field"><label>Client</label><input id="ncClient" placeholder="Nom du client / événement" value="${edit&&existing.client?esc(existing.client):(prefill&&prefill.client?esc(prefill.client):"")}"></div>
+      <div class="field"><label>Client — téléphone</label><input id="ncClientTel" placeholder="06…" value="${edit&&existing.client_tel?esc(existing.client_tel):(prefill&&prefill.client_tel?esc(prefill.client_tel):"")}"></div>
+      <div class="field"><label>Client — e-mail</label><input id="ncClientEmail" type="email" placeholder="client@exemple.fr" value="${edit&&existing.client_email?esc(existing.client_email):(prefill&&prefill.client_email?esc(prefill.client_email):"")}"></div>
       <div class="field"><label>Date de l'événement</label><input id="ncDate" type="date" required value="${dval}"></div>
       <div class="field"><label>Nombre de personnes (PAX)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50"${edit?(existing.couverts!=null?` value="${existing.couverts}"`:""):' value="50"'}></div>
       ${lieux.length?`<div class="field"><label>Lieu déjà utilisé (optionnel)</label><select id="ncLieu"><option value="">— Nouveau lieu —</option>${lieux.map((l,i)=>`<option value="${i}">${esc(l.adresse)}</option>`).join("")}</select></div>`:""}
