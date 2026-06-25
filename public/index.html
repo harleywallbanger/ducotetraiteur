@@ -160,7 +160,7 @@
     <div class="wordmark"><span class="dot"></span><b>Du Côté Traiteur</b></div>
     <div class="brand-lead">
       <h1>L'atelier, au cordeau.</h1>
-      <p>Recettes, matériel, inventaire et commandes — avec le calcul des besoins par couvert, au même endroit.</p>
+      <p>Recettes, matériel, inventaire et commandes — avec le calcul des besoins par personne, au même endroit.</p>
     </div>
     <div class="legend">
       <div class="cap">Couverture du stock</div>
@@ -320,8 +320,8 @@ async function loadCmdList(){
   try{
     const list=await api(`/api/commandes?from=${cmdRange.from}&to=${cmdRange.to}`);
     if(!list.length){box.innerHTML=`<div class="state"><b>Aucune commande</b>Rien sur cette période.</div>`;return;}
-    box.innerHTML=list.map(c=>{const dt=parseDate(c.date_event);const d=dt?String(dt.getDate()).padStart(2,"0"):"--";const mo=dt?MOIS[dt.getMonth()]:"";const cv=num(c.total_couverts);
-      return `<button class="ticket" data-id="${c.id}"><div class="t-date"><div class="d">${d}</div><div class="m">${mo}</div></div><div class="t-title">${esc(c.client||"Sans client")}</div><div class="t-covers">${cv!=null?`<b>${fmtN(cv)}</b> couv.`:""}</div><div class="t-status">${statusChip(c.statut)}</div></button>`;}).join("");
+    box.innerHTML=list.map(c=>{const dt=parseDate(c.date_event);const d=dt?String(dt.getDate()).padStart(2,"0"):"--";const mo=dt?MOIS[dt.getMonth()]:"";const cv=num(c.couverts);
+      return `<button class="ticket" data-id="${c.id}"><div class="t-date"><div class="d">${d}</div><div class="m">${mo}</div></div><div class="t-title">${esc(c.client||"Sans client")}</div><div class="t-covers">${cv!=null?`<b>${fmtN(cv)}</b> pers.`:""}</div><div class="t-status">${statusChip(c.statut)}</div></button>`;}).join("");
     box.querySelectorAll(".ticket").forEach(t=>t.addEventListener("click",()=>openCommande(t.dataset.id)));
   }catch(e){box.innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
 }
@@ -361,13 +361,13 @@ function renderCommandeDetail(c){
   const clientBox=(c.client_tel||c.client_email)?`<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;line-height:1.8">🧾 Client${c.client_tel?` · ☎ <a href="tel:${esc(c.client_tel)}" style="color:var(--bottle-2)">${esc(c.client_tel)}</a>`:""}${c.client_email?` · ✉ <a href="mailto:${esc(c.client_email)}" style="color:var(--bottle-2)">${esc(c.client_email)}</a>`:""}</div>`:"";
   const ficheBox=(c.adresse||c.contact_nom||c.contact_tel||c.lieu_descriptif)?`<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;line-height:1.8">${c.adresse?`📍 ${esc(c.adresse)}<br>`:""}${c.lieu_descriptif?`🏛 ${esc(c.lieu_descriptif)}<br>`:""}${(c.contact_nom||c.contact_tel)?`👤 ${esc(c.contact_nom||"")}${c.contact_tel?` · ☎ <a href="tel:${esc(c.contact_tel)}" style="color:var(--bottle-2)">${esc(c.contact_tel)}</a>`:""}`:""}</div>`:"";
   $("modal").innerHTML=`
-    <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${notesBox}
       ${clientBox}
       ${ficheBox}
       <h4>Recettes</h4>
-      <table class="grid"><thead><tr><th>Recette</th><th class="num">Couverts</th></tr></thead><tbody>${lignes}</tbody></table>
+      <table class="grid"><thead><tr><th>Recette</th><th class="num">Personnes</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
       ${canOps()?`<div style="margin-top:20px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
     </div>`;
@@ -401,14 +401,14 @@ async function openCommandeForm(existing){
       <div class="field"><label>Client — téléphone</label><input id="ncClientTel" placeholder="06…" value="${edit&&existing.client_tel?esc(existing.client_tel):""}"></div>
       <div class="field"><label>Client — e-mail</label><input id="ncClientEmail" type="email" placeholder="client@exemple.fr" value="${edit&&existing.client_email?esc(existing.client_email):""}"></div>
       <div class="field"><label>Date de l'événement</label><input id="ncDate" type="date" required value="${dval}"></div>
-      <div class="field"><label>Nombre de couverts (total)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50"${edit?"":' value="50"'}></div>
+      <div class="field"><label>Nombre de personnes (PAX)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50"${edit?(existing.couverts!=null?` value="${existing.couverts}"`:""):' value="50"'}></div>
       ${lieux.length?`<div class="field"><label>Lieu déjà utilisé (optionnel)</label><select id="ncLieu"><option value="">— Nouveau lieu —</option>${lieux.map((l,i)=>`<option value="${i}">${esc(l.adresse)}</option>`).join("")}</select></div>`:""}
       <div class="field"><label>Adresse de l'événement</label><input id="ncAdresse" placeholder="Lieu / adresse complète" value="${edit&&existing.adresse?esc(existing.adresse):""}"></div>
       <div class="field"><label>Descriptif du lieu (équipements, accès…)</label><textarea id="ncLieuDesc" placeholder="Ex. cuisine équipée, bar avec tirage pression tête plate, accès par carte magnétique…">${edit&&existing.lieu_descriptif?esc(existing.lieu_descriptif):""}</textarea></div>
       <div class="field"><label>Contact sur place — nom</label><input id="ncContactNom" placeholder="Nom du contact" value="${edit&&existing.contact_nom?esc(existing.contact_nom):""}"></div>
       <div class="field"><label>Contact sur place — téléphone</label><input id="ncContactTel" placeholder="06…" value="${edit&&existing.contact_tel?esc(existing.contact_tel):""}"></div>
       <div class="field"><label>Notes (optionnel)</label><textarea id="ncNotes" placeholder="Allergies, horaire de livraison…">${edit&&existing.notes?esc(existing.notes):""}</textarea></div>
-      <h4>Recettes &amp; couverts</h4><div id="ncLines"></div>
+      <h4>Recettes &amp; personnes</h4><div id="ncLines"></div>
       <button class="btn ghost sm" id="ncAdd" style="margin:4px 0 16px">+ Ajouter une recette</button>
       <button class="btn full" id="ncSave"><span class="spin"></span><span class="label">${edit?"Enregistrer les modifications":"Créer la commande"}</span></button>
       <div class="msg err" id="ncMsg"></div>
@@ -426,7 +426,7 @@ async function openCommandeForm(existing){
     const lignes=[...box.querySelectorAll(".line-row")].map(r=>({recette_id:Number(r.querySelector("select").value),nb_personnes:Number(r.querySelector(".qty").value)})).filter(l=>l.recette_id&&l.nb_personnes>0);
     if(!date_event||!lignes.length){m.textContent="Une date et au moins une recette sont requises.";m.classList.add("show");return;}
     const btn=$("ncSave");btn.classList.add("loading");btn.disabled=true;
-    const body={client:$("ncClient").value.trim()||null,client_tel:$("ncClientTel").value.trim()||null,client_email:$("ncClientEmail").value.trim()||null,date_event,notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lignes};
+    const body={client:$("ncClient").value.trim()||null,client_tel:$("ncClientTel").value.trim()||null,client_email:$("ncClientEmail").value.trim()||null,date_event,couverts:(parseInt($("ncCouverts").value,10)||null),notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lignes};
     try{
       if(edit)await api(`/api/commandes/${existing.id}`,{method:"PUT",body});
       else await api("/api/commandes",{method:"POST",body});
@@ -469,7 +469,7 @@ async function renderRecettes(){
   try{
     const list=await api("/api/recettes");
     if(!list.length){$("recBox").innerHTML=`<div class="state"><b>Aucune recette</b>${canRecipes()?"Créez la première avec « + Nouvelle recette ».":"Le catalogue est vide."}</div>`;return;}
-    $("recBox").innerHTML=`<div class="cards">`+list.map(r=>`<button class="rcard" data-id="${r.id}"><h3>${esc(r.nom)}</h3>${r.description?`<p>${esc(r.description)}</p>`:""}<div class="base">base : ${fmtN(r.portion_base)} couverts</div></button>`).join("")+`</div>`;
+    $("recBox").innerHTML=`<div class="cards">`+list.map(r=>`<button class="rcard" data-id="${r.id}"><h3>${esc(r.nom)}</h3>${r.description?`<p>${esc(r.description)}</p>`:""}<div class="base">base : ${fmtN(r.portion_base)} personnes</div></button>`).join("")+`</div>`;
     $("recBox").querySelectorAll(".rcard").forEach(b=>b.addEventListener("click",()=>openRecette(b.dataset.id)));
   }catch(e){$("recBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
 }
@@ -478,8 +478,8 @@ async function openRecette(id){
   try{
     const r=await api(`/api/recettes/${id}`);
     const ing=(r.ingredients||[]).map(i=>`<tr><td>${esc(i.nom)}</td><td class="num">${fmtN(i.quantite)} ${esc(i.unite||"")}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
-    const mat=(r.materiels||[]).map(m=>`<tr><td>${esc(m.nom)}</td><td>${m.mode==="par_palier"?`1 / ${fmtN(m.capacite)} couv.`:"proportionnel"}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")||`<tr><td colspan="3">—</td></tr>`;
-    $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(r.nom)}</h3><div class="meta">Base de ${fmtN(r.portion_base)} couverts</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    const mat=(r.materiels||[]).map(m=>`<tr><td>${esc(m.nom)}</td><td>${m.mode==="par_palier"?`1 / ${fmtN(m.capacite)} pers.`:"proportionnel"}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")||`<tr><td colspan="3">—</td></tr>`;
+    $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(r.nom)}</h3><div class="meta">Base de ${fmtN(r.portion_base)} personnes</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
         ${r.description?`<p style="font-size:14px;color:var(--ink-soft);margin-bottom:6px">${esc(r.description)}</p>`:""}
         <h4>Ingrédients (cuisine)</h4><table class="grid"><thead><tr><th>Ingrédient</th><th class="num">Quantité / base</th></tr></thead><tbody>${ing}</tbody></table>
@@ -504,7 +504,7 @@ async function openRecetteEditor(id){
     <div class="modal-body">
       <div class="field"><label>Nom</label><input id="reNom" value="${rec?esc(rec.nom):""}"></div>
       <div class="field"><label>Description</label><input id="reDesc" value="${rec&&rec.description?esc(rec.description):""}"></div>
-      <div class="field"><label>Portion de base (couverts)</label><input id="reBase" type="number" min="1" value="${rec?esc(rec.portion_base):"10"}"></div>
+      <div class="field"><label>Portion de base (personnes)</label><input id="reBase" type="number" min="1" value="${rec?esc(rec.portion_base):"10"}"></div>
       <h4>Ingrédients (cuisine)</h4><div id="reIng"></div><button class="btn ghost sm" id="reIngAdd" style="margin:4px 0 8px">+ Ingrédient</button>
       <h4>Matériel</h4><div id="reMat"></div><button class="btn ghost sm" id="reMatAdd" style="margin:4px 0 14px">+ Matériel</button>
       <button class="btn full" id="reSave"><span class="spin"></span><span class="label">${id?"Enregistrer":"Créer la recette"}</span></button>
@@ -594,8 +594,8 @@ async function renderPrep(){
   try{
     const list=await api(`/api/commandes?from=${from}&to=${toS}`);
     if(!list.length){$("prepList").innerHTML=`<div class="state"><b>Rien à préparer</b>Aucune commande dans les 30 prochains jours.</div>`;return;}
-    $("prepList").innerHTML=list.map(c=>{const dt=parseDate(c.date_event);const d=dt?String(dt.getDate()).padStart(2,"0"):"--";const mo=dt?MOIS[dt.getMonth()]:"";const cv=num(c.total_couverts);
-      return `<button class="ticket" data-id="${c.id}"><div class="t-date"><div class="d">${d}</div><div class="m">${mo}</div></div><div class="t-title">${esc(c.client||"Sans client")}</div><div class="t-covers">${cv!=null?`<b>${fmtN(cv)}</b> couv.`:""}</div><div class="t-status">${statusChip(c.statut)}</div></button>`;}).join("");
+    $("prepList").innerHTML=list.map(c=>{const dt=parseDate(c.date_event);const d=dt?String(dt.getDate()).padStart(2,"0"):"--";const mo=dt?MOIS[dt.getMonth()]:"";const cv=num(c.couverts);
+      return `<button class="ticket" data-id="${c.id}"><div class="t-date"><div class="d">${d}</div><div class="m">${mo}</div></div><div class="t-title">${esc(c.client||"Sans client")}</div><div class="t-covers">${cv!=null?`<b>${fmtN(cv)}</b> pers.`:""}</div><div class="t-status">${statusChip(c.statut)}</div></button>`;}).join("");
     $("prepList").querySelectorAll(".ticket").forEach(t=>t.addEventListener("click",()=>openPrep(t.dataset.id)));
   }catch(e){$("prepList").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
 }
@@ -607,21 +607,25 @@ async function openPrep(id){
     const renderItem=(it)=>{const done=prepDone[id].has(it.key);
       const stockPill=it.mat?(it.manque>0?` <span class="pill pill-alert">manque ${fmtN(it.manque)}</span>`:(it.stock!=null?` <span class="pill">stock ${fmtN(it.stock)}</span>`:"")):"";
       return `<label class="check ${done?"done":""}" data-key="${it.key}"><input type="checkbox" ${done?"checked":""}><span>${esc(it.label)}${stockPill}</span><span class="q">${esc(it.q)}</span></label>`;};
+    const recItems=(c.lignes||[]).map(l=>({key:"r"+l.recette_id,label:l.nom,q:`${fmtN(l.nb_personnes)}`,mat:false}));
     const matItems=(c.materiel||[]).map(m=>({key:"m"+m.materiel_id,label:m.materiel,q:`${fmtN(m.quantite)} ${m.unite||""}`,mat:true,stock:num(m.stock),manque:num(m.manque)||0}));
-    const cuiItems=(c.cuisine||[]).map(i=>({key:"c"+i.ingredient_id,label:i.ingredient,q:`${fmtN(i.quantite)} ${i.unite||""}`,mat:false}));
-    const total=matItems.length+cuiItems.length;
-    $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(c.client||"Commande")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"}):""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    const total=recItems.length+matItems.length;
+    const pax=num(c.couverts);
+    const headInfo=[c.adresse?`📍 ${esc(c.adresse)}`:"",pax!=null?`👥 ${fmtN(pax)} PAX`:""].filter(Boolean).join(" · ");
+    $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(c.client||"Commande")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
+        ${headInfo?`<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:8px;line-height:1.7">${headInfo}</div>`:""}
+        ${c.lieu_descriptif?`<div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px">🏛 ${esc(c.lieu_descriptif)}</div>`:""}
         ${c.notes?`<p style="font-size:14px;color:var(--ink-soft);margin-bottom:10px">📝 ${esc(c.notes)}</p>`:""}
         <div class="progress"><i id="prepBar" style="width:0%"></i></div>
         <div id="prepPct" style="font-size:12.5px;color:var(--ink-soft);margin-bottom:14px"></div>
         <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div style="flex:1;min-width:240px"><h4>Recette</h4><div id="prepRec"></div></div>
           <div style="flex:1;min-width:240px"><h4>Matériel</h4><div id="prepMat"></div></div>
-          <div style="flex:1;min-width:240px"><h4>Cuisine / recette</h4><div id="prepCui"></div></div>
         </div>
       </div>`;
+    $("prepRec").innerHTML=recItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucune recette.</div>`;
     $("prepMat").innerHTML=matItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucun matériel.</div>`;
-    $("prepCui").innerHTML=cuiItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucun ingrédient.</div>`;
     function refresh(){const dn=prepDone[id].size;$("prepBar").style.width=(total?Math.round(dn/total*100):0)+"%";$("prepPct").textContent=total?(dn===total?"✓ Tout est prêt":`${dn} / ${total} préparés`):"";}
     $("modal").querySelectorAll(".check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[id].add(k);else prepDone[id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
     refresh();

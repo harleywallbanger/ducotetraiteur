@@ -12,7 +12,7 @@ router.get('/', ah(async (req, res) => {
   if (to)   { params.push(to);   conds.push(`c.date_event <= $${params.length}`); }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
   const { rows } = await pool.query(
-    `SELECT c.id, c.client, c.date_event, c.notes,
+    `SELECT c.id, c.client, c.date_event, c.couverts, c.notes,
             COALESCE(s.statut, 'ok') AS statut,
             (SELECT COALESCE(SUM(nb_personnes), 0) FROM commande_recettes cr WHERE cr.commande_id = c.id) AS total_couverts
        FROM commandes c
@@ -47,15 +47,15 @@ router.get('/:id', ah(async (req, res) => {
 
 // Créer une commande
 router.post('/', requireManager, ah(async (req, res) => {
-  const { client: clientNom, date_event, notes = null, adresse = null, lieu_descriptif = null, contact_nom = null, contact_tel = null, lignes = [] } = req.body || {};
+  const { client: clientNom, client_tel = null, client_email = null, date_event, couverts = null, notes = null, adresse = null, lieu_descriptif = null, contact_nom = null, contact_tel = null, lignes = [] } = req.body || {};
   if (!date_event || !lignes.length)
     return res.status(400).json({ error: 'date_event et au moins une recette requis' });
   const cx = await pool.connect();
   try {
     await cx.query('BEGIN');
     const { rows } = await cx.query(
-      'INSERT INTO commandes (client, date_event, notes, adresse, lieu_descriptif, contact_nom, contact_tel, cree_par) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-      [clientNom, date_event, notes, adresse, lieu_descriptif, contact_nom, contact_tel, req.user.id]);
+      'INSERT INTO commandes (client, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, cree_par) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+      [clientNom, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, req.user.id]);
     for (const l of lignes)
       await cx.query(
         'INSERT INTO commande_recettes (commande_id, recette_id, nb_personnes) VALUES ($1, $2, $3)',
@@ -72,13 +72,13 @@ router.post('/', requireManager, ah(async (req, res) => {
 
 // Modifier l'en-tête + les recettes d'une commande
 router.put('/:id', requireManager, ah(async (req, res) => {
-  const { client: clientNom, date_event, notes = null, adresse = null, contact_nom = null, contact_tel = null, lignes } = req.body || {};
+  const { client: clientNom, client_tel = null, client_email = null, date_event, couverts = null, notes = null, adresse = null, lieu_descriptif = null, contact_nom = null, contact_tel = null, lignes } = req.body || {};
   const cx = await pool.connect();
   try {
     await cx.query('BEGIN');
     const { rows } = await cx.query(
-      'UPDATE commandes SET client=$1, date_event=$2, notes=$3, adresse=$4, contact_nom=$5, contact_tel=$6 WHERE id=$7 RETURNING *',
-      [clientNom, date_event, notes, adresse, contact_nom, contact_tel, req.params.id]);
+      'UPDATE commandes SET client=$1, client_tel=$2, client_email=$3, date_event=$4, couverts=$5, notes=$6, adresse=$7, lieu_descriptif=$8, contact_nom=$9, contact_tel=$10 WHERE id=$11 RETURNING *',
+      [clientNom, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, req.params.id]);
     if (!rows[0]) { await cx.query('ROLLBACK'); return res.status(404).json({ error: 'Commande introuvable' }); }
     if (Array.isArray(lignes)) {
       await cx.query('DELETE FROM commande_recettes WHERE commande_id = $1', [req.params.id]);
