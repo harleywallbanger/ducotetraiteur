@@ -368,6 +368,7 @@ async function openCommande(id){
   try{
     const c=await api(`/api/commandes/${id}`);
     try{c.boissons_lignes=await api(`/api/commandes/${id}/boissons`);}catch(_){c.boissons_lignes=[];}
+    try{c.materiel_extra=await api(`/api/commandes/${id}/materiels-extra`);}catch(_){c.materiel_extra=[];}
     renderCommandeDetail(c);
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
 }
@@ -389,7 +390,8 @@ function printFiche(c, which){
   const ings=(c.cuisine||[]).map(i=>`<tr><td>${e(i.ingredient)}</td><td class="n">${fmtN(i.quantite)} ${e(i.unite||"")}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
   const cuisineSection=`<h2>Fiche cuisine</h2><h3>Plats</h3><table><thead><tr><th>Plat</th><th class="n">Quantité</th></tr></thead><tbody>${plats}</tbody></table><h3>Ingrédients à préparer</h3><table><thead><tr><th>Ingrédient</th><th class="n">Quantité</th></tr></thead><tbody>${ings}</tbody></table>`;
   const mats=(c.materiel||[]).map(m=>`<tr><td>${e(m.materiel)}</td><td class="n">${fmtN(m.quantite)} ${e(m.unite||"")}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
-  const materielSection=`<h2>Fiche matériel</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${mats}</tbody></table>`;
+  const meF=c.materiel_extra||[];
+  const materielSection=`<h2>Fiche matériel</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${mats}</tbody></table>${meF.length?`<h3>Matériel supplémentaire</h3><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${meF.map(m=>`<tr><td>${e(m.materiel)}</td><td class="n">${fmtN(m.quantite)} ${e(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:""}`;
   const allRows=(c.lignes||[]).map(l=>{const ks=allergKeys(l.allergenes).map(k=>ALLERG_LABEL[k]||k);const txt=[ks.join(", "),l.allergenes_libre||""].filter(Boolean).join(" · ");return `<tr><td>${e(l.nom)}</td><td>${txt||"—"}</td></tr>`;}).join("")||`<tr><td colspan="2">—</td></tr>`;
   const union=new Set();(c.lignes||[]).forEach(l=>allergKeys(l.allergenes).forEach(k=>union.add(k)));
   const allergSection=`<h2>Fiche allergènes</h2><p class="lead">Allergènes présents dans cette commande : <b>${union.size?[...union].map(k=>ALLERG_LABEL[k]||k).join(", "):"aucun renseigné"}</b></p><table><thead><tr><th>Plat</th><th>Allergènes</th></tr></thead><tbody>${allRows}</tbody></table>`;
@@ -477,6 +479,8 @@ function printLivreur(c){
   const mats=(c.materiel||[]).map(m=>`<tr><td>${e(m.materiel)}</td><td class="n">${fmtN(m.quantite)} ${e(m.unite||"")}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
   const bl=c.boissons_lignes||[];
   const boissonsBlock=bl.length?`<h2>Boissons (sortie / retour)</h2><table><thead><tr><th>Boisson</th><th class="n">Sortie</th><th class="n">Retour</th><th class="n">Conso</th></tr></thead><tbody>${bl.map(b=>`<tr><td>${e(b.nom)}</td><td class="n">${fmtN(b.sortie)}</td><td class="n">${b.retour==null?"":fmtN(b.retour)}</td><td class="n">${b.conso==null?"":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>`:"";
+  const meL=c.materiel_extra||[];
+  const materielExtraBlock=meL.length?`<h2>Matériel supplémentaire</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${meL.map(m=>`<tr><td>${e(m.materiel)}</td><td class="n">${fmtN(m.quantite)} ${e(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:"";
   const footer=`<div class="ft">${e(SOCIETE.nom)} · ${e(SOCIETE.adresse)} · Tél ${e(SOCIETE.tel)} · Fax ${e(SOCIETE.fax)}</div>`;
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Feuille de préparation — ${e(c.client||"")} ${e(dateStr)}</title><style>
     *{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:28px;font-size:13px}
@@ -500,6 +504,7 @@ function printLivreur(c){
     </tbody></table>
     <h2>Menu</h2><table><thead><tr><th>Plat</th><th class="n">Quantité</th></tr></thead><tbody>${menu}</tbody></table>
     <h2>Matériel</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${mats}</tbody></table>
+    ${materielExtraBlock}
     ${boissonsBlock}
     ${footer}
   </body></html>`);
@@ -555,6 +560,32 @@ async function openBoissonsEditor(c, onDone){
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }
+async function openMaterielExtraEditor(c, onDone){
+  let mats=[];
+  try{mats=await api("/api/materiels");}catch(e){toast(e.message,true);return;}
+  if(!mats.length){toast("Aucun matériel au catalogue. Crée-en dans Stock → + Matériel.",true);return;}
+  const mopts=mats.map(m=>`<option value="${m.id}">${esc(m.nom)}</option>`).join("");
+  const cur=c.materiel_extra||[];
+  openModal(`<div class="modal-head"><div><h3>Matériel supplémentaire</h3><div class="meta">${esc(c.client||"Commande")}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:10px">Matériel ajouté à la main, en plus de celui calculé par les recettes (extra, location, divers).</p>
+      <div id="meBox"></div>
+      <button class="btn ghost sm" id="meAdd" style="margin:4px 0 16px">+ Ajouter du matériel</button>
+      <button class="btn full" id="meSave"><span class="spin"></span><span class="label">Enregistrer</span></button>
+      <div class="msg err" id="meMsg"></div>
+    </div>`);
+  const box=$("meBox");
+  function row(mid,q){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${mopts}</select><input class="qty" type="number" min="1" placeholder="qté" value="${q!=null?esc(q):""}"><button class="rm">×</button>`;if(mid!=null)r.querySelector("select").value=mid;r.querySelector(".rm").addEventListener("click",()=>r.remove());box.appendChild(r);}
+  if(cur.length)cur.forEach(m=>row(m.materiel_id,m.quantite));else row();
+  $("meAdd").addEventListener("click",()=>row());
+  $("meSave").addEventListener("click",async()=>{
+    const m=$("meMsg");m.classList.remove("show");
+    const arr=[...box.querySelectorAll(".line-row")].map(r=>({materiel_id:Number(r.querySelector("select").value),quantite:Number(r.querySelector(".qty").value)||0})).filter(x=>x.materiel_id&&x.quantite>0);
+    const btn=$("meSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(`/api/commandes/${c.id}/materiels-extra`,{method:"PUT",body:{materiels:arr}});toast("Matériel supplémentaire enregistré.");if(typeof onDone==="function")onDone();else closeModal();}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -589,6 +620,8 @@ function renderCommandeDetail(c){
   const allergBox=(cmdAllergKeys.size||cmdAllergNotes.length)?`<div style="background:#fff;border:1px solid rgba(38,44,42,.15);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:13.5px"><b style="display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px">Allergènes</b>${[...cmdAllergKeys].map(k=>ALLERG_LABEL[k]||k).join(", ")}${cmdAllergNotes.length?`${cmdAllergKeys.size?" · ":""}${cmdAllergNotes.map(esc).join(" · ")}`:""}</div>`:"";
   const bl=c.boissons_lignes||[];
   const boissonsBox=bl.length?`<h4 style="margin-top:18px">Boissons (sortie / retour)</h4><table class="grid"><thead><tr><th>Boisson</th><th class="num">Sortie</th><th class="num">Retour</th><th class="num">Conso</th></tr></thead><tbody>${bl.map(b=>`<tr><td>${esc(b.nom)}</td><td class="num">${fmtN(b.sortie)}</td><td class="num">${b.retour==null?"—":fmtN(b.retour)}</td><td class="num">${b.conso==null?"—":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>${canAddMateriel()?`<button class="btn sm ghost" id="btnRetour" style="margin-top:8px">Retour J+1…</button>`:""}`:"";
+  const me=c.materiel_extra||[];
+  const materielExtraBox=(me.length||canAddMateriel())?`<h4 style="margin-top:18px">Matériel supplémentaire</h4>${me.length?`<table class="grid"><thead><tr><th>Matériel</th><th class="num">Quantité</th></tr></thead><tbody>${me.map(m=>`<tr><td>${esc(m.materiel)}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:`<div class="state" style="padding:6px 0">Aucun matériel supplémentaire.</div>`}${canAddMateriel()?`<button class="btn sm ghost" id="btnMatExtra" style="margin-top:8px">Modifier le matériel supplémentaire</button>`:""}`:"";
   $("modal").innerHTML=`
     <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
@@ -600,6 +633,7 @@ function renderCommandeDetail(c){
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Personnes</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
       ${boissonsBox}
+      ${materielExtraBox}
       <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prCuisine">🖨 Cuisine</button><button class="btn sm ghost" id="prMateriel">🖨 Matériel</button><button class="btn sm ghost" id="prAllerg">🖨 Allergènes</button><button class="btn sm" id="prAll">🖨 Tout imprimer</button></div>
       ${canOps()?`<div style="margin-top:12px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
     </div>`;
@@ -621,6 +655,7 @@ function renderCommandeDetail(c){
   $("prAllerg").addEventListener("click",()=>printAllergClient(c));
   $("prAll").addEventListener("click",()=>printFiche(c,"all"));
   if($("btnRetour"))$("btnRetour").addEventListener("click",()=>openRetour(c,()=>openCommande(c.id)));
+  if($("btnMatExtra"))$("btnMatExtra").addEventListener("click",()=>openMaterielExtraEditor(c,()=>openCommande(c.id)));
 }
 
 async function openCommandeForm(existing,prefill){
@@ -937,6 +972,7 @@ async function openPrep(id){
   try{
     const c=await api(`/api/commandes/${id}`);const dt=parseDate(c.date_event);
     try{c.boissons_lignes=await api(`/api/commandes/${id}/boissons`);}catch(_){c.boissons_lignes=[];}
+    try{c.materiel_extra=await api(`/api/commandes/${id}/materiels-extra`);}catch(_){c.materiel_extra=[];}
     if(!prepDone[id])prepDone[id]=new Set();
     const renderItem=(it)=>{const done=prepDone[id].has(it.key);
       const stockPill=it.mat?(it.manque>0?` <span class="pill pill-alert">manque ${fmtN(it.manque)}</span>`:(it.stock!=null?` <span class="pill">stock ${fmtN(it.stock)}</span>`:"")):"";
@@ -957,6 +993,8 @@ async function openPrep(id){
           <div style="flex:1;min-width:240px"><h4>Recette</h4><div id="prepRec"></div></div>
           <div style="flex:1;min-width:240px"><h4>Matériel</h4><div id="prepMat"></div></div>
         </div>
+        ${(c.materiel_extra||[]).length?`<h4 style="margin-top:18px">Matériel supplémentaire</h4><table class="grid"><thead><tr><th>Matériel</th><th class="num">Quantité</th></tr></thead><tbody>${c.materiel_extra.map(m=>`<tr><td>${esc(m.materiel)}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:`<h4 style="margin-top:18px">Matériel supplémentaire</h4><div class="state" style="padding:6px 0">Aucun.</div>`}
+        <button class="btn sm ghost" id="prepMatExtra" style="margin-top:8px">Modifier le matériel supplémentaire</button>
         ${(c.boissons_lignes||[]).length?`<h4 style="margin-top:18px">Boissons (sortie / retour)</h4><table class="grid"><thead><tr><th>Boisson</th><th class="num">Sortie</th><th class="num">Retour</th><th class="num">Conso</th></tr></thead><tbody>${c.boissons_lignes.map(b=>`<tr><td>${esc(b.nom)}</td><td class="num">${fmtN(b.sortie)}</td><td class="num">${b.retour==null?"—":fmtN(b.retour)}</td><td class="num">${b.conso==null?"—":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>`:`<h4 style="margin-top:18px">Boissons</h4><div class="state" style="padding:6px 0">Aucune boisson sur cette commande.</div>`}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn sm ghost" id="prepBoissons">Modifier les boissons</button>${(c.boissons_lignes||[]).length?`<button class="btn sm ghost" id="prepRetour">Retour J+1…</button>`:""}</div>
         <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prepPrint">🖨 Imprimer la feuille</button></div>
@@ -965,6 +1003,7 @@ async function openPrep(id){
     $("prepMat").innerHTML=matItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucun matériel.</div>`;
     if($("prepPrint"))$("prepPrint").addEventListener("click",()=>printLivreur(c));
     if($("prepBoissons"))$("prepBoissons").addEventListener("click",()=>openBoissonsEditor(c,()=>openPrep(id)));
+    if($("prepMatExtra"))$("prepMatExtra").addEventListener("click",()=>openMaterielExtraEditor(c,()=>openPrep(id)));
     if($("prepRetour"))$("prepRetour").addEventListener("click",()=>openRetour(c,()=>openPrep(id)));
     function refresh(){const dn=prepDone[id].size;$("prepBar").style.width=(total?Math.round(dn/total*100):0)+"%";$("prepPct").textContent=total?(dn===total?"✓ Tout est prêt":`${dn} / ${total} préparés`):"";}
     $("modal").querySelectorAll(".check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[id].add(k);else prepDone[id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
