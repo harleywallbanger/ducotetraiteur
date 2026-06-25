@@ -529,6 +529,32 @@ function openRetour(c, onDone){
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }
+async function openBoissonsEditor(c, onDone){
+  let boissons=[];
+  try{boissons=await api("/api/boissons");}catch(e){toast(e.message,true);return;}
+  if(!boissons.length){toast("Aucune boisson au catalogue. Crée-les dans Stock → + Boisson.",true);return;}
+  const bopts=boissons.map(b=>`<option value="${b.id}">${esc(b.nom)}</option>`).join("");
+  const cur=c.boissons_lignes||[];
+  openModal(`<div class="modal-head"><div><h3>Boissons — sortie</h3><div class="meta">${esc(c.client||"Commande")}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:10px">Sélectionne les boissons embarquées et leur quantité (sortie). Le retour se saisit ensuite avec « Retour J+1 ».</p>
+      <div id="beBox"></div>
+      <button class="btn ghost sm" id="beAdd" style="margin:4px 0 16px">+ Ajouter une boisson</button>
+      <button class="btn full" id="beSave"><span class="spin"></span><span class="label">Enregistrer les boissons</span></button>
+      <div class="msg err" id="beMsg"></div>
+    </div>`);
+  const box=$("beBox");
+  function row(bid,sortie){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${bopts}</select><input class="qty" type="number" min="0" placeholder="sortie" value="${sortie!=null?esc(sortie):""}"><button class="rm">×</button>`;if(bid!=null)r.querySelector("select").value=bid;r.querySelector(".rm").addEventListener("click",()=>r.remove());box.appendChild(r);}
+  if(cur.length)cur.forEach(b=>row(b.boisson_id,b.sortie));else row();
+  $("beAdd").addEventListener("click",()=>row());
+  $("beSave").addEventListener("click",async()=>{
+    const m=$("beMsg");m.classList.remove("show");
+    const arr=[...box.querySelectorAll(".line-row")].map(r=>({boisson_id:Number(r.querySelector("select").value),sortie:Number(r.querySelector(".qty").value)||0})).filter(x=>x.boisson_id);
+    const btn=$("beSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(`/api/commandes/${c.id}/boissons`,{method:"PUT",body:{boissons:arr}});toast("Boissons enregistrées.");if(typeof onDone==="function")onDone();else closeModal();}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -931,12 +957,14 @@ async function openPrep(id){
           <div style="flex:1;min-width:240px"><h4>Recette</h4><div id="prepRec"></div></div>
           <div style="flex:1;min-width:240px"><h4>Matériel</h4><div id="prepMat"></div></div>
         </div>
-        ${(c.boissons_lignes||[]).length?`<h4 style="margin-top:18px">Boissons (sortie / retour)</h4><table class="grid"><thead><tr><th>Boisson</th><th class="num">Sortie</th><th class="num">Retour</th><th class="num">Conso</th></tr></thead><tbody>${c.boissons_lignes.map(b=>`<tr><td>${esc(b.nom)}</td><td class="num">${fmtN(b.sortie)}</td><td class="num">${b.retour==null?"—":fmtN(b.retour)}</td><td class="num">${b.conso==null?"—":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table><button class="btn sm ghost" id="prepRetour" style="margin-top:8px">Retour J+1…</button>`:""}
+        ${(c.boissons_lignes||[]).length?`<h4 style="margin-top:18px">Boissons (sortie / retour)</h4><table class="grid"><thead><tr><th>Boisson</th><th class="num">Sortie</th><th class="num">Retour</th><th class="num">Conso</th></tr></thead><tbody>${c.boissons_lignes.map(b=>`<tr><td>${esc(b.nom)}</td><td class="num">${fmtN(b.sortie)}</td><td class="num">${b.retour==null?"—":fmtN(b.retour)}</td><td class="num">${b.conso==null?"—":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>`:`<h4 style="margin-top:18px">Boissons</h4><div class="state" style="padding:6px 0">Aucune boisson sur cette commande.</div>`}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn sm ghost" id="prepBoissons">Modifier les boissons</button>${(c.boissons_lignes||[]).length?`<button class="btn sm ghost" id="prepRetour">Retour J+1…</button>`:""}</div>
         <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prepPrint">🖨 Imprimer la feuille</button></div>
       </div>`;
     $("prepRec").innerHTML=recItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucune recette.</div>`;
     $("prepMat").innerHTML=matItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucun matériel.</div>`;
     if($("prepPrint"))$("prepPrint").addEventListener("click",()=>printLivreur(c));
+    if($("prepBoissons"))$("prepBoissons").addEventListener("click",()=>openBoissonsEditor(c,()=>openPrep(id)));
     if($("prepRetour"))$("prepRetour").addEventListener("click",()=>openRetour(c,()=>openPrep(id)));
     function refresh(){const dn=prepDone[id].size;$("prepBar").style.width=(total?Math.round(dn/total*100):0)+"%";$("prepPct").textContent=total?(dn===total?"✓ Tout est prêt":`${dn} / ${total} préparés`):"";}
     $("modal").querySelectorAll(".check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[id].add(k);else prepDone[id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
