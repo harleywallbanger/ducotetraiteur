@@ -157,7 +157,7 @@
 <!-- LOGIN -->
 <div class="login-wrap" id="login">
   <aside class="brandside">
-    <div class="wordmark"><span class="dot"></span><b>Du Côté Traiteur</b></div>
+    <div class="wordmark"><span class="dot"></span><b>Du Côté Traiteur</b><span style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.04em;opacity:.6;margin-left:1px">Schiltigheim</span></div>
     <div class="brand-lead">
       <h1>L'atelier, au cordeau.</h1>
       <p>Recettes, matériel, inventaire et commandes — avec le calcul des besoins par personne, au même endroit.</p>
@@ -189,7 +189,7 @@
 <!-- APP -->
 <div class="app" id="app">
   <header class="topbar">
-    <div class="wordmark"><span class="dot"></span><b>Du Côté Traiteur</b></div>
+    <div class="wordmark"><span class="dot"></span><b>Du Côté Traiteur</b><span style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.04em;opacity:.6;margin-left:1px">Schiltigheim</span></div>
     <div class="who"><span id="hello">Bonjour</span><span class="role-chip" id="role">—</span><button class="logout" id="myPwdBtn">Mon mot de passe</button><button class="logout" id="logoutBtn">Se déconnecter</button></div>
   </header>
   <nav class="tabs" id="tabs"></nav>
@@ -213,6 +213,8 @@ const isAdmin=()=> role()==="admin";
 const canAccounts=()=> role()==="admin"||role()==="manager";
 const canOps=()=> role()==="manager";                       // commandes, stock
 const canRecipes=()=> role()==="manager"||role()==="chef";  // recettes + quantités
+const canAddMateriel=()=>["admin","manager","preparateur"].includes(role());  // créer/gérer matériel + stock
+const canAddIngredient=()=>["admin","manager","chef"].includes(role());        // créer ingrédients (cuisine)
 
 const ROLE_LABEL={admin:"Administrateur",manager:"Gérant",chef:"Chef cuisinier",cuisinier:"Cuisinier",preparateur:"Préparateur"};
 const ALLERGENES=[["gluten","Gluten"],["crustaces","Crustacés"],["oeufs","Œufs"],["poisson","Poisson"],["arachides","Arachides"],["soja","Soja"],["lait","Lait"],["fruits_coque","Fruits à coque"],["celeri","Céleri"],["moutarde","Moutarde"],["sesame","Sésame"],["sulfites","Sulfites"],["lupin","Lupin"],["mollusques","Mollusques"]];
@@ -220,7 +222,7 @@ const ALLERG_LABEL=Object.fromEntries(ALLERGENES);
 const allergKeys=(s)=>s?String(s).split(",").map(x=>x.trim()).filter(Boolean):[];
 const TABS=[
   {id:"commandes",label:"Commandes",roles:["admin","manager","chef","cuisinier"]},
-  {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef"]},
+  {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef","preparateur"]},
   {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier"]},
   {id:"admin",label:"Administration",roles:["admin","manager"]},
   {id:"prep",label:"Préparation",roles:["chef","preparateur"]},
@@ -443,14 +445,52 @@ async function openCommandeForm(existing){
 }
 
 /* ---------- STOCK ---------- */
+function openNewMateriel(){
+  openModal(`<div class="modal-head"><div><h3>Nouveau matériel</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom</label><input id="nmNom" placeholder="ex. Plateau inox"></div>
+      <div class="field"><label>Unité</label><input id="nmUnite" placeholder="ex. pièce" value="pièce"></div>
+      <div class="field"><label>Stock initial</label><input id="nmStock" type="number" min="0" step="any" value="0"></div>
+      <div class="field"><label>Seuil d'alerte</label><input id="nmSeuil" type="number" min="0" step="any" value="0"></div>
+      <button class="btn full" id="nmSave"><span class="spin"></span><span class="label">Créer le matériel</span></button>
+      <div class="msg err" id="nmMsg"></div></div>`);
+  $("nmSave").addEventListener("click",async()=>{
+    const msg=$("nmMsg");msg.classList.remove("show");
+    const nom=$("nmNom").value.trim(),unite=$("nmUnite").value.trim();
+    if(!nom||!unite){msg.textContent="Nom et unité requis.";msg.classList.add("show");return;}
+    const body={nom,unite,quantite_stock:Number($("nmStock").value)||0,seuil_alerte:Number($("nmSeuil").value)||0};
+    const btn=$("nmSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api("/api/materiels",{method:"POST",body});closeModal();toast("Matériel créé.");renderStock();}
+    catch(e){msg.textContent=e.message;msg.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
+function openNewIngredient(){
+  openModal(`<div class="modal-head"><div><h3>Nouvel ingrédient</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom</label><input id="niNom" placeholder="ex. Saumon fumé"></div>
+      <div class="field"><label>Unité</label><input id="niUnite" placeholder="ex. kg, L, pièce" value="kg"></div>
+      <button class="btn full" id="niSave"><span class="spin"></span><span class="label">Créer l'ingrédient</span></button>
+      <div class="msg err" id="niMsg"></div>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px">Il sera ensuite disponible dans l'éditeur de recette.</p></div>`);
+  $("niSave").addEventListener("click",async()=>{
+    const msg=$("niMsg");msg.classList.remove("show");
+    const nom=$("niNom").value.trim(),unite=$("niUnite").value.trim();
+    if(!nom||!unite){msg.textContent="Nom et unité requis.";msg.classList.add("show");return;}
+    const btn=$("niSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api("/api/ingredients",{method:"POST",body:{nom,unite}});closeModal();toast("Ingrédient créé.");}
+    catch(e){msg.textContent=e.message;msg.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 async function renderStock(){
-  $("content").innerHTML=`<div class="head"><h2>Stock &amp; alertes</h2>${canOps()?"":`<span class="ro-note">consultation seule</span>`}</div><div id="stockBox"><div class="state">Chargement…</div></div>`;
+  $("content").innerHTML=`<div class="head"><h2>Stock &amp; alertes</h2><div class="tools">${canAddMateriel()?`<button class="btn sm" id="newMat">+ Matériel</button> `:""}${canAddIngredient()?`<button class="btn sm ghost" id="newIng">+ Ingrédient</button>`:""}${(!canAddMateriel()&&!canAddIngredient())?`<span class="ro-note">consultation seule</span>`:""}</div></div><div id="stockBox"><div class="state">Chargement…</div></div>`;
+  if(canAddMateriel())$("newMat").addEventListener("click",openNewMateriel);
+  if(canAddIngredient())$("newIng").addEventListener("click",openNewIngredient);
   try{
     const inv=await api("/api/inventaire");const a=inv.filter(x=>x.en_alerte).length;
     const banner=a?`<div class="legend2"><span><span class="pip" style="background:var(--court)"></span> ${a} article${a>1?"s":""} sous le seuil</span></div>`:`<div class="legend2"><span><span class="pip" style="background:var(--ok)"></span> Tout le matériel est au-dessus de son seuil</span></div>`;
-    const rows=inv.map(x=>`<tr class="${x.en_alerte?"alert":""}"><td>${esc(x.nom)}</td><td class="num">${fmtN(x.quantite_stock)} ${esc(x.unite||"")}</td><td class="num">${fmtN(x.seuil_alerte)}</td><td>${x.en_alerte?`<span class="pill pill-alert">à réapprovisionner</span>`:`<span class="status s-ok"><span class="pip"></span>OK</span>`}</td>${canOps()?`<td><button class="btn ghost sm" data-edit="${x.materiel_id}" data-nom="${esc(x.nom)}" data-stock="${esc(x.quantite_stock)}" data-seuil="${esc(x.seuil_alerte)}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canOps()?5:4}">Aucun matériel</td></tr>`;
-    $("stockBox").innerHTML=banner+`<table class="grid"><thead><tr><th>Matériel</th><th class="num">En stock</th><th class="num">Seuil</th><th>État</th>${canOps()?"<th></th>":""}</tr></thead><tbody>${rows}</tbody></table>`;
-    if(canOps())$("stockBox").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>editStock(b.dataset)));
+    const rows=inv.map(x=>`<tr class="${x.en_alerte?"alert":""}"><td>${esc(x.nom)}</td><td class="num">${fmtN(x.quantite_stock)} ${esc(x.unite||"")}</td><td class="num">${fmtN(x.seuil_alerte)}</td><td>${x.en_alerte?`<span class="pill pill-alert">à réapprovisionner</span>`:`<span class="status s-ok"><span class="pip"></span>OK</span>`}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-edit="${x.materiel_id}" data-nom="${esc(x.nom)}" data-stock="${esc(x.quantite_stock)}" data-seuil="${esc(x.seuil_alerte)}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?5:4}">Aucun matériel</td></tr>`;
+    $("stockBox").innerHTML=banner+`<table class="grid"><thead><tr><th>Matériel</th><th class="num">En stock</th><th class="num">Seuil</th><th>État</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${rows}</tbody></table>`;
+    if(canAddMateriel())$("stockBox").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>editStock(b.dataset)));
   }catch(e){$("stockBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
 }
 function editStock(d){

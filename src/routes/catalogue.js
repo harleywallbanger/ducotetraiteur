@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { pool } = require('../db');
-const { requireManager } = require('../auth');
+const { requireManager, requireIngredientEditor, requireMaterielEditor } = require('../auth');
 const ah = require('../ah');
 
 // ---------- INGRÉDIENTS ----------
@@ -9,7 +9,7 @@ router.get('/ingredients', ah(async (_req, res) => {
   res.json(rows);
 }));
 
-router.post('/ingredients', requireManager, ah(async (req, res) => {
+router.post('/ingredients', requireIngredientEditor, ah(async (req, res) => {
   const { nom, unite } = req.body || {};
   if (!nom || !unite) return res.status(400).json({ error: 'nom et unite requis' });
   const { rows } = await pool.query(
@@ -27,7 +27,7 @@ router.get('/materiels', ah(async (_req, res) => {
   res.json(rows);
 }));
 
-router.post('/materiels', requireManager, ah(async (req, res) => {
+router.post('/materiels', requireMaterielEditor, ah(async (req, res) => {
   const { nom, unite, quantite_stock = 0, seuil_alerte = 0 } = req.body || {};
   if (!nom || !unite) return res.status(400).json({ error: 'nom et unite requis' });
   const client = await pool.connect();
@@ -49,7 +49,7 @@ router.post('/materiels', requireManager, ah(async (req, res) => {
 }));
 
 // Mettre à jour le stock / seuil d'un matériel
-router.put('/materiels/:id/inventaire', requireManager, ah(async (req, res) => {
+router.put('/materiels/:id/inventaire', requireMaterielEditor, ah(async (req, res) => {
   const { quantite_stock, seuil_alerte } = req.body || {};
   if (quantite_stock == null || seuil_alerte == null)
     return res.status(400).json({ error: 'quantite_stock et seuil_alerte requis' });

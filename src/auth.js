@@ -45,4 +45,15 @@ function requireAccountManager(req, res, next) {
   next();
 }
 
-module.exports = { hashPassword, comparePassword, signToken, authMiddleware, requireManager, requireRecipeEditor, requireAccountManager };
+function requireIngredientEditor(req, res, next) {
+  const r = req.user && req.user.role;
+  if (r === 'admin' || r === 'manager' || r === 'chef') return next();
+  return res.status(403).json({ error: 'Accès réservé' });
+}
+function requireMaterielEditor(req, res, next) {
+  const r = req.user && req.user.role;
+  if (r === 'admin' || r === 'manager' || r === 'preparateur') return next();
+  return res.status(403).json({ error: 'Accès réservé' });
+}
+
+module.exports = { hashPassword, comparePassword, signToken, authMiddleware, requireManager, requireRecipeEditor, requireAccountManager, requireIngredientEditor, requireMaterielEditor };
