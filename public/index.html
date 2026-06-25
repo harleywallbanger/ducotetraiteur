@@ -336,6 +336,45 @@ async function openCommande(id){
     const c=await api(`/api/commandes/${id}`);renderCommandeDetail(c);
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
 }
+const SOCIETE={nom:"Du Côté Traiteur",ville:"Schiltigheim",adresse:"2 rue Evariste Galois – BP 80010 – 67012 Strasbourg Cedex",tel:"03 88 18 68 18",fax:"03 88 83 75 25"};
+function printFiche(c, which){
+  const w=window.open("","_blank","width=840,height=1000");
+  if(!w){toast("Autorise les fenêtres pop-up pour imprimer.",true);return;}
+  const e=esc;const dt=parseDate(c.date_event);
+  const dateStr=dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):"";
+  const pax=num(c.couverts);
+  const header=`<div class="ph"><div class="soc"><b>${e(SOCIETE.nom)}</b> · ${e(SOCIETE.ville)}<div class="soc-sub">${e(SOCIETE.adresse)} · Tél ${e(SOCIETE.tel)}</div></div></div>
+    <div class="info">
+      <div><span class="k">Client</span> ${e(c.client||"—")}${c.client_tel?` · ☎ ${e(c.client_tel)}`:""}${c.client_email?` · ${e(c.client_email)}`:""}</div>
+      <div><span class="k">Date</span> ${e(dateStr)}${pax!=null?` · <b>${fmtN(pax)} personnes</b>`:""}</div>
+      ${c.adresse?`<div><span class="k">Lieu</span> ${e(c.adresse)}${c.lieu_descriptif?` — ${e(c.lieu_descriptif)}`:""}</div>`:""}
+      ${(c.contact_nom||c.contact_tel)?`<div><span class="k">Contact sur place</span> ${e(c.contact_nom||"")}${c.contact_tel?` · ☎ ${e(c.contact_tel)}`:""}</div>`:""}
+    </div>`;
+  const plats=(c.lignes||[]).map(l=>`<tr><td>${e(l.nom)}</td><td class="n">${fmtN(l.nb_personnes)}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
+  const ings=(c.cuisine||[]).map(i=>`<tr><td>${e(i.ingredient)}</td><td class="n">${fmtN(i.quantite)} ${e(i.unite||"")}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
+  const cuisineSection=`<h2>Fiche cuisine</h2><h3>Plats</h3><table><thead><tr><th>Plat</th><th class="n">Quantité</th></tr></thead><tbody>${plats}</tbody></table><h3>Ingrédients à préparer</h3><table><thead><tr><th>Ingrédient</th><th class="n">Quantité</th></tr></thead><tbody>${ings}</tbody></table>`;
+  const mats=(c.materiel||[]).map(m=>`<tr><td>${e(m.materiel)}</td><td class="n">${fmtN(m.quantite)} ${e(m.unite||"")}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
+  const materielSection=`<h2>Fiche matériel</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${mats}</tbody></table>`;
+  const allRows=(c.lignes||[]).map(l=>{const ks=allergKeys(l.allergenes).map(k=>ALLERG_LABEL[k]||k);const txt=[ks.join(", "),l.allergenes_libre||""].filter(Boolean).join(" · ");return `<tr><td>${e(l.nom)}</td><td>${txt||"—"}</td></tr>`;}).join("")||`<tr><td colspan="2">—</td></tr>`;
+  const union=new Set();(c.lignes||[]).forEach(l=>allergKeys(l.allergenes).forEach(k=>union.add(k)));
+  const allergSection=`<h2>Fiche allergènes</h2><p class="lead">Allergènes présents dans cette commande : <b>${union.size?[...union].map(k=>ALLERG_LABEL[k]||k).join(", "):"aucun renseigné"}</b></p><table><thead><tr><th>Plat</th><th>Allergènes</th></tr></thead><tbody>${allRows}</tbody></table>`;
+  const parts=[];
+  if(which==="cuisine"||which==="all")parts.push(cuisineSection);
+  if(which==="materiel"||which==="all")parts.push(materielSection);
+  if(which==="allergenes"||which==="all")parts.push(allergSection);
+  const footer=`<div class="ft">${e(SOCIETE.nom)} · ${e(SOCIETE.adresse)} · Tél ${e(SOCIETE.tel)} · Fax ${e(SOCIETE.fax)}</div>`;
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${e(c.client||"Commande")} — ${e(dateStr)}</title><style>
+    *{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:28px;font-size:13px}
+    .ph{border-bottom:2px solid #1a1a1a;padding-bottom:8px;margin-bottom:12px}.soc b{font-size:18px}.soc-sub{font-size:11px;color:#555;margin-top:2px}
+    .info{margin-bottom:16px;line-height:1.7}.info .k{display:inline-block;min-width:130px;color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+    h2{font-size:16px;margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid #ccc}h3{font-size:13px;margin:12px 0 4px;color:#444}
+    table{width:100%;border-collapse:collapse;margin-bottom:10px}th,td{text-align:left;padding:5px 8px;border:1px solid #ccc;font-size:12.5px}
+    th{background:#f3f3ef}td.n,th.n{text-align:right;white-space:nowrap}.lead{margin:6px 0 10px}.pb{page-break-after:always}
+    .ft{margin-top:24px;padding-top:8px;border-top:1px solid #ccc;font-size:10px;color:#777;text-align:center}@media print{body{margin:14mm}}
+  </style></head><body>${header}${parts.join('<div class="pb"></div>')}${footer}</body></html>`);
+  w.document.close();w.focus();
+  setTimeout(()=>{try{w.print();}catch(_){}},350);
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -378,7 +417,8 @@ function renderCommandeDetail(c){
       <h4>Recettes</h4>
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Personnes</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
-      ${canOps()?`<div style="margin-top:20px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
+      <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prCuisine">🖨 Cuisine</button><button class="btn sm ghost" id="prMateriel">🖨 Matériel</button><button class="btn sm ghost" id="prAllerg">🖨 Allergènes</button><button class="btn sm" id="prAll">🖨 Tout imprimer</button></div>
+      ${canOps()?`<div style="margin-top:12px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
     </div>`;
   if(editable){
     $("modal").querySelectorAll("input[data-mat]").forEach(inp=>inp.addEventListener("change",()=>adjust(c.id,"materiel",inp.dataset.mat,inp.value)));
@@ -393,6 +433,10 @@ function renderCommandeDetail(c){
     refresh();
   }
   if(canOps()){$("editCmd").addEventListener("click",()=>openCommandeForm(c));$("delCmd").addEventListener("click",()=>deleteCommande(c.id));}
+  $("prCuisine").addEventListener("click",()=>printFiche(c,"cuisine"));
+  $("prMateriel").addEventListener("click",()=>printFiche(c,"materiel"));
+  $("prAllerg").addEventListener("click",()=>printFiche(c,"allergenes"));
+  $("prAll").addEventListener("click",()=>printFiche(c,"all"));
 }
 
 async function openCommandeForm(existing){
@@ -677,9 +721,11 @@ async function openPrep(id){
           <div style="flex:1;min-width:240px"><h4>Recette</h4><div id="prepRec"></div></div>
           <div style="flex:1;min-width:240px"><h4>Matériel</h4><div id="prepMat"></div></div>
         </div>
+        <button class="btn sm ghost" id="prepPrint" style="margin-top:16px">🖨 Imprimer la feuille</button>
       </div>`;
     $("prepRec").innerHTML=recItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucune recette.</div>`;
     $("prepMat").innerHTML=matItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucun matériel.</div>`;
+    if($("prepPrint"))$("prepPrint").addEventListener("click",()=>printFiche(c,"all"));
     function refresh(){const dn=prepDone[id].size;$("prepBar").style.width=(total?Math.round(dn/total*100):0)+"%";$("prepPct").textContent=total?(dn===total?"✓ Tout est prêt":`${dn} / ${total} préparés`):"";}
     $("modal").querySelectorAll(".check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[id].add(k);else prepDone[id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
     refresh();
