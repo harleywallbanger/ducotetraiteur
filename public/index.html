@@ -375,6 +375,61 @@ function printFiche(c, which){
   w.document.close();w.focus();
   setTimeout(()=>{try{w.print();}catch(_){}},350);
 }
+function printAllergClient(c){
+  const w=window.open("","_blank","width=840,height=1000");
+  if(!w){toast("Autorise les fenêtres pop-up pour imprimer.",true);return;}
+  const e=esc;const dt=parseDate(c.date_event);
+  const dateStr=dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):"";
+  const menu=(c.lignes||[]).map(l=>`<li>${e(l.nom)}</li>`).join("")||`<li>—</li>`;
+  const rows=(c.lignes||[]).map(l=>{
+    const chips=allergKeys(l.allergenes).map(k=>`<span class="chip">${e(ALLERG_LABEL[k]||k)}</span>`).join("");
+    const libre=l.allergenes_libre?`<span class="libre">${e(l.allergenes_libre)}</span>`:"";
+    return `<tr><td class="plat">${e(l.nom)}</td><td>${(chips||libre)?`${chips}${libre}`:`<span class="none">—</span>`}</td></tr>`;
+  }).join("")||`<tr><td colspan="2">—</td></tr>`;
+  const union=new Set();(c.lignes||[]).forEach(l=>allergKeys(l.allergenes).forEach(k=>union.add(k)));
+  const summary=union.size?[...union].map(k=>`<span class="chip big">${e(ALLERG_LABEL[k]||k)}</span>`).join(""):`<span class="none">Aucun allergène réglementaire signalé</span>`;
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Allergènes — ${e(dateStr)}</title><style>
+    *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#221F18;margin:0;background:#F8F5EE}
+    .wrap{max-width:760px;margin:0 auto}
+    .band{background:#1E3D30;color:#F8F5EE;padding:24px 36px;display:flex;align-items:center;justify-content:space-between}
+    .wm{display:flex;align-items:center;gap:10px}.dot{width:13px;height:13px;border-radius:50%;background:#C8A24B;display:inline-block}
+    .wm b{font-size:21px}.wm .vil{font-family:monospace;font-size:11px;letter-spacing:.04em;opacity:.7;margin-left:2px}
+    .soc-sub{font-size:11px;opacity:.85;text-align:right;line-height:1.5}
+    .gold{height:4px;background:#C8A24B}
+    .body{padding:30px 36px 8px}
+    h1{font-size:24px;margin:0 0 4px;color:#1E3D30}.date{color:#5C5749;font-size:14px;margin-bottom:24px;text-transform:capitalize}
+    h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.1em;color:#C8A24B;margin:26px 0 12px;border-bottom:1px solid rgba(34,31,24,.12);padding-bottom:6px}
+    ul.menu{list-style:none;padding:0;margin:0}ul.menu li{padding:9px 0 9px 22px;position:relative;font-size:15.5px;border-bottom:1px dotted rgba(34,31,24,.14)}
+    ul.menu li:before{content:"";position:absolute;left:4px;top:15px;width:7px;height:7px;border-radius:50%;background:#1E3D30}
+    table{width:100%;border-collapse:collapse}td{padding:11px 10px;border-bottom:1px solid rgba(34,31,24,.10);vertical-align:top;font-size:14px}
+    td.plat{font-weight:600;width:42%}
+    .chip{display:inline-block;background:#F4EAD0;color:#7a5410;border:1px solid #e4cf95;border-radius:999px;padding:3px 11px;font-size:12.5px;margin:2px 4px 2px 0;font-weight:600}
+    .chip.big{background:#1E3D30;color:#F8F5EE;border-color:#1E3D30;font-size:13px;padding:5px 14px;margin:3px 6px 3px 0}
+    .libre{display:inline-block;color:#5C5749;font-style:italic;font-size:13px;margin-left:2px}.none{color:#8a8678}
+    .summary{background:#fff;border:1px solid rgba(34,31,24,.12);border-left:4px solid #C8A24B;border-radius:8px;padding:16px 18px}
+    .note{font-size:11.5px;color:#8a8678;margin-top:18px;font-style:italic}
+    .foot{margin-top:30px;padding:16px 36px;border-top:1px solid rgba(34,31,24,.12);font-size:10.5px;color:#8a8678;text-align:center}
+    @media print{body{background:#fff}.wrap{max-width:none}}
+  </style></head><body><div class="wrap">
+    <div class="band"><div class="wm"><span class="dot"></span><b>Du Côté Traiteur</b><span class="vil">Schiltigheim</span></div><div class="soc-sub">${e(SOCIETE.adresse)}<br>Tél ${e(SOCIETE.tel)}</div></div>
+    <div class="gold"></div>
+    <div class="body">
+      <h1>Information allergènes</h1>
+      <div class="date">${e(dateStr)}</div>
+      <h2>Menu</h2>
+      <ul class="menu">${menu}</ul>
+      <h2>Allergènes par plat</h2>
+      <table><tbody>${rows}</tbody></table>
+      <h2>Allergènes présents dans ce menu</h2>
+      <div class="summary">${summary}</div>
+      <p class="note">Liste établie sur la base des 14 allergènes à déclaration obligatoire. En cas d'allergie sévère, merci de nous le signaler.</p>
+    </div>
+    <div class="foot">${e(SOCIETE.nom)} · ${e(SOCIETE.adresse)} · Tél ${e(SOCIETE.tel)} · Fax ${e(SOCIETE.fax)}</div>
+  </div></body></html>`);
+  w.document.close();w.focus();
+  setTimeout(()=>{try{w.print();}catch(_){}},350);
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -435,7 +490,7 @@ function renderCommandeDetail(c){
   if(canOps()){$("editCmd").addEventListener("click",()=>openCommandeForm(c));$("delCmd").addEventListener("click",()=>deleteCommande(c.id));}
   $("prCuisine").addEventListener("click",()=>printFiche(c,"cuisine"));
   $("prMateriel").addEventListener("click",()=>printFiche(c,"materiel"));
-  $("prAllerg").addEventListener("click",()=>printFiche(c,"allergenes"));
+  $("prAllerg").addEventListener("click",()=>printAllergClient(c));
   $("prAll").addEventListener("click",()=>printFiche(c,"all"));
 }
 
