@@ -25,6 +25,7 @@ app.use('/api/commandes', require('./routes/commandes'));
 app.use('/api/lieux',     require('./routes/lieux'));
 app.use('/api/clients',   require('./routes/clients'));
 app.use('/api',           require('./routes/catalogue')); // /api/ingredients, /api/materiels, /api/inventaire, /api/alertes
+app.use('/api',           require('./routes/boissons'));
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Route inconnue' }));
@@ -51,6 +52,8 @@ const { pool: _migPool } = require('./db');
     'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_email text',
     'ALTER TABLE recettes ADD COLUMN IF NOT EXISTS allergenes text',
     'ALTER TABLE recettes ADD COLUMN IF NOT EXISTS allergenes_libre text',
+    "CREATE TABLE IF NOT EXISTS boissons (id SERIAL PRIMARY KEY, nom TEXT UNIQUE NOT NULL, unite TEXT, stock INTEGER DEFAULT 0)",
+    "CREATE TABLE IF NOT EXISTS commande_boissons (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, boisson_id INTEGER NOT NULL REFERENCES boissons(id) ON DELETE CASCADE, sortie INTEGER DEFAULT 0, retour INTEGER, conso_applique INTEGER, PRIMARY KEY (commande_id, boisson_id))",
   ]) {
     try { await _migPool.query(sql); }
     catch (e) { console.error('Migration colonne:', e.message); }
