@@ -604,22 +604,26 @@ async function openPrep(id){
   try{
     const c=await api(`/api/commandes/${id}`);const dt=parseDate(c.date_event);
     if(!prepDone[id])prepDone[id]=new Set();
-    const items=[];
-    (c.materiel||[]).forEach(m=>items.push({key:"m"+m.materiel_id,label:m.materiel,q:`${fmtN(m.quantite)} ${m.unite||""}`,mat:true,stock:num(m.stock),manque:num(m.manque)||0}));
-    (c.cuisine||[]).forEach(i=>items.push({key:"c"+i.ingredient_id,label:i.ingredient,q:`${fmtN(i.quantite)} ${i.unite||""}`,mat:false}));
+    const renderItem=(it)=>{const done=prepDone[id].has(it.key);
+      const stockPill=it.mat?(it.manque>0?` <span class="pill pill-alert">manque ${fmtN(it.manque)}</span>`:(it.stock!=null?` <span class="pill">stock ${fmtN(it.stock)}</span>`:"")):"";
+      return `<label class="check ${done?"done":""}" data-key="${it.key}"><input type="checkbox" ${done?"checked":""}><span>${esc(it.label)}${stockPill}</span><span class="q">${esc(it.q)}</span></label>`;};
+    const matItems=(c.materiel||[]).map(m=>({key:"m"+m.materiel_id,label:m.materiel,q:`${fmtN(m.quantite)} ${m.unite||""}`,mat:true,stock:num(m.stock),manque:num(m.manque)||0}));
+    const cuiItems=(c.cuisine||[]).map(i=>({key:"c"+i.ingredient_id,label:i.ingredient,q:`${fmtN(i.quantite)} ${i.unite||""}`,mat:false}));
+    const total=matItems.length+cuiItems.length;
     $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(c.client||"Commande")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"}):""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
         ${c.notes?`<p style="font-size:14px;color:var(--ink-soft);margin-bottom:10px">📝 ${esc(c.notes)}</p>`:""}
         <div class="progress"><i id="prepBar" style="width:0%"></i></div>
         <div id="prepPct" style="font-size:12.5px;color:var(--ink-soft);margin-bottom:14px"></div>
-        <div id="prepItems"></div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div style="flex:1;min-width:240px"><h4>Matériel</h4><div id="prepMat"></div></div>
+          <div style="flex:1;min-width:240px"><h4>Cuisine / recette</h4><div id="prepCui"></div></div>
+        </div>
       </div>`;
-    const box=$("prepItems");
-    box.innerHTML=items.map(it=>{const done=prepDone[id].has(it.key);
-      const stockPill=it.mat?(it.manque>0?` <span class="pill pill-alert">manque ${fmtN(it.manque)}</span>`:(it.stock!=null?` <span class="pill">stock ${fmtN(it.stock)}</span>`:"")):"";
-      return `<label class="check ${done?"done":""}" data-key="${it.key}"><input type="checkbox" ${done?"checked":""}><span>${esc(it.label)}${stockPill}</span><span class="q">${esc(it.q)}</span></label>`;}).join("")||`<div class="state">Rien à préparer pour cette commande.</div>`;
-    function refresh(){const tot=items.length,dn=prepDone[id].size;$("prepBar").style.width=(tot?Math.round(dn/tot*100):0)+"%";$("prepPct").textContent=tot?(dn===tot?"✓ Tout est prêt":`${dn} / ${tot} préparés`):"";}
-    box.querySelectorAll(".check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[id].add(k);else prepDone[id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
+    $("prepMat").innerHTML=matItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucun matériel.</div>`;
+    $("prepCui").innerHTML=cuiItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucun ingrédient.</div>`;
+    function refresh(){const dn=prepDone[id].size;$("prepBar").style.width=(total?Math.round(dn/total*100):0)+"%";$("prepPct").textContent=total?(dn===total?"✓ Tout est prêt":`${dn} / ${total} préparés`):"";}
+    $("modal").querySelectorAll(".check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[id].add(k);else prepDone[id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
     refresh();
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
 }
