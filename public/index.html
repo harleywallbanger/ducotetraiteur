@@ -430,6 +430,44 @@ function printAllergClient(c){
   w.document.close();w.focus();
   setTimeout(()=>{try{w.print();}catch(_){}},350);
 }
+function printLivreur(c){
+  const w=window.open("","_blank","width=840,height=1000");
+  if(!w){toast("Autorise les fenêtres pop-up pour imprimer.",true);return;}
+  const e=esc;const dt=parseDate(c.date_event);
+  const dateStr=dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):"—";
+  const pax=num(c.couverts);
+  const lieu=[c.adresse||"",c.lieu_descriptif||""].filter(Boolean).join(" — ")||"—";
+  const contact=[c.contact_nom||"",c.contact_tel?`☎ ${c.contact_tel}`:""].filter(Boolean).join(" · ")||"—";
+  const menu=(c.lignes||[]).map(l=>`<tr><td>${e(l.nom)}</td><td class="n">${fmtN(l.nb_personnes)}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
+  const mats=(c.materiel||[]).map(m=>`<tr><td>${e(m.materiel)}</td><td class="n">${fmtN(m.quantite)} ${e(m.unite||"")}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
+  const footer=`<div class="ft">${e(SOCIETE.nom)} · ${e(SOCIETE.adresse)} · Tél ${e(SOCIETE.tel)} · Fax ${e(SOCIETE.fax)}</div>`;
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Feuille de préparation — ${e(c.client||"")} ${e(dateStr)}</title><style>
+    *{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:28px;font-size:13px}
+    .ph{border-bottom:2px solid #1a1a1a;padding-bottom:8px;margin-bottom:6px}.soc b{font-size:18px}.soc-sub{font-size:11px;color:#555;margin-top:2px}
+    h1{font-size:17px;margin:10px 0 14px;color:#1a1a1a}
+    h2{font-size:15px;margin:20px 0 8px;padding-bottom:4px;border-bottom:1px solid #ccc}
+    table{width:100%;border-collapse:collapse;margin-bottom:10px}th,td{text-align:left;padding:6px 8px;border:1px solid #ccc;font-size:12.5px}
+    th{background:#f3f3ef}td.n,th.n{text-align:right;white-space:nowrap}
+    table.info th{width:170px;color:#555;font-weight:600;background:#f7f6f2}
+    .ft{margin-top:24px;padding-top:8px;border-top:1px solid #ccc;font-size:10px;color:#777;text-align:center}
+    @media print{body{margin:14mm}}
+  </style></head><body>
+    <div class="ph"><div class="soc"><b>${e(SOCIETE.nom)}</b> · ${e(SOCIETE.ville)}<div class="soc-sub">${e(SOCIETE.adresse)} · Tél ${e(SOCIETE.tel)}</div></div></div>
+    <h1>Feuille de préparation / livraison</h1>
+    <table class="info"><tbody>
+      <tr><th>Client</th><td>${e(c.client||"—")}${c.client_tel?` · ☎ ${e(c.client_tel)}`:""}</td></tr>
+      <tr><th>Date</th><td>${e(dateStr)}</td></tr>
+      <tr><th>Nombre de personnes</th><td><b>${pax!=null?fmtN(pax):"—"}</b></td></tr>
+      <tr><th>Lieu de livraison</th><td>${e(lieu)}</td></tr>
+      <tr><th>Contact sur place</th><td>${e(contact)}</td></tr>
+    </tbody></table>
+    <h2>Menu</h2><table><thead><tr><th>Plat</th><th class="n">Quantité</th></tr></thead><tbody>${menu}</tbody></table>
+    <h2>Matériel</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${mats}</tbody></table>
+    ${footer}
+  </body></html>`);
+  w.document.close();w.focus();
+  setTimeout(()=>{try{w.print();}catch(_){}},350);
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -780,7 +818,7 @@ async function openPrep(id){
       </div>`;
     $("prepRec").innerHTML=recItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucune recette.</div>`;
     $("prepMat").innerHTML=matItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucun matériel.</div>`;
-    if($("prepPrint"))$("prepPrint").addEventListener("click",()=>printFiche(c,"all"));
+    if($("prepPrint"))$("prepPrint").addEventListener("click",()=>printLivreur(c));
     function refresh(){const dn=prepDone[id].size;$("prepBar").style.width=(total?Math.round(dn/total*100):0)+"%";$("prepPct").textContent=total?(dn===total?"✓ Tout est prêt":`${dn} / ${total} préparés`):"";}
     $("modal").querySelectorAll(".check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[id].add(k);else prepDone[id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
     refresh();
