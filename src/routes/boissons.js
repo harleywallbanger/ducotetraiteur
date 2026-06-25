@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const ah = require('../ah');
-const { requireMaterielEditor } = require('../auth');
+const { requireMaterielEditor, requireManager } = require('../auth');
 
 /* ---------- Catalogue boissons ---------- */
 router.get('/boissons', ah(async (req, res) => {
@@ -185,6 +185,37 @@ router.put('/commandes/:id/materiels-extra', requireMaterielEditor, ah(async (re
     client.release();
   }
   res.json({ ok: true });
+}));
+
+/* ---- Type de prestation (buffet / livré) sur une commande ---- */
+router.put('/commandes/:id/type-prestation', requireManager, ah(async (req, res) => {
+  const t = String((req.body && req.body.type_prestation) || '').trim();
+  if (!['buffet', 'livre'].includes(t)) return res.status(400).json({ error: 'Type de prestation invalide' });
+  const { rows } = await pool.query(
+    'UPDATE commandes SET type_prestation = $1 WHERE id = $2 RETURNING id, type_prestation',
+    [t, req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Commande introuvable' });
+  res.json(rows[0]);
+}));
+
+/* ---- Usage matériel (normal / jetable / les_deux) ---- */
+router.get('/materiels-usage', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT id, nom, COALESCE(usage_type, 'les_deux') AS usage_type FROM materiels ORDER BY nom"
+  );
+  res.json(rows);
+}));
+
+router.put('/materiels/:id/usage', requireMaterielEditor, ah(async (req, res) => {
+  const u = String((req.body && req.body.usage_type) || '').trim();
+  if (!['normal', 'jetable', 'les_deux'].includes(u)) return res.status(400).json({ error: 'Usage invalide' });
+  const { rows } = await pool.query(
+    'UPDATE materiels SET usage_type = $1 WHERE id = $2 RETURNING id, nom, usage_type',
+    [u, req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Matériel introuvable' });
+  res.json(rows[0]);
 }));
 
 module.exports = router;

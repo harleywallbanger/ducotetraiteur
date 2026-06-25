@@ -55,6 +55,12 @@ const { pool: _migPool } = require('./db');
     "CREATE TABLE IF NOT EXISTS boissons (id SERIAL PRIMARY KEY, nom TEXT UNIQUE NOT NULL, unite TEXT, stock INTEGER DEFAULT 0)",
     "CREATE TABLE IF NOT EXISTS commande_boissons (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, boisson_id INTEGER NOT NULL REFERENCES boissons(id) ON DELETE CASCADE, sortie INTEGER DEFAULT 0, retour INTEGER, conso_applique INTEGER, PRIMARY KEY (commande_id, boisson_id))",
     "CREATE TABLE IF NOT EXISTS commande_materiels_extra (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, materiel_id INTEGER NOT NULL REFERENCES materiels(id) ON DELETE CASCADE, quantite INTEGER DEFAULT 0, PRIMARY KEY (commande_id, materiel_id))",
+      "ALTER TYPE mode_echelle ADD VALUE IF NOT EXISTS 'par_couvert'",
+      "ALTER TABLE recette_materiels DROP CONSTRAINT IF EXISTS capacite_coherente",
+      "ALTER TABLE recette_materiels ADD CONSTRAINT capacite_coherente CHECK ((mode = 'par_palier' AND capacite IS NOT NULL) OR (mode IN ('proportionnel','par_couvert') AND capacite IS NULL))",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS type_prestation TEXT DEFAULT 'buffet'",
+      "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS usage_type TEXT DEFAULT 'les_deux'",
+      `CREATE OR REPLACE VIEW besoins_materiel_commande AS SELECT cr.commande_id, rm.materiel_id, m.nom AS materiel, m.unite, SUM(CASE rm.mode WHEN 'proportionnel' THEN rm.quantite * cr.nb_personnes::NUMERIC / r.portion_base WHEN 'par_palier' THEN CEIL(cr.nb_personnes::NUMERIC / rm.capacite) * rm.quantite ELSE 0 END) + COALESCE(MAX(CASE WHEN rm.mode = 'par_couvert' THEN rm.quantite * COALESCE(co.couverts, cr.nb_personnes)::NUMERIC END), 0) AS quantite_totale FROM commande_recettes cr JOIN commandes co ON co.id = cr.commande_id JOIN recettes r ON r.id = cr.recette_id JOIN recette_materiels rm ON rm.recette_id = r.id JOIN materiels m ON m.id = rm.materiel_id WHERE (COALESCE(co.type_prestation,'buffet') = 'buffet' AND COALESCE(m.usage_type,'les_deux') IN ('normal','les_deux')) OR (COALESCE(co.type_prestation,'buffet') = 'livre' AND COALESCE(m.usage_type,'les_deux') IN ('jetable','les_deux')) GROUP BY cr.commande_id, rm.materiel_id, m.nom, m.unite`,
   ]) {
     try { await _migPool.query(sql); }
     catch (e) { console.error('Migration colonne:', e.message); }
