@@ -56,6 +56,7 @@ const { pool: _migPool } = require('./db');
     catch (e) { console.error('Migration colonne:', e.message); }
   }
   console.log('Migration colonnes commandes : terminee');
+  try { await require('./seed-catalog')(_migPool); } catch (e) { console.error('Seed:', e.message); }
   app.listen(port, '0.0.0.0', () => {
     console.log(`API traiteur en écoute sur le port ${port}`);
   });
