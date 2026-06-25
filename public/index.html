@@ -215,6 +215,9 @@ const canOps=()=> role()==="manager";                       // commandes, stock
 const canRecipes=()=> role()==="manager"||role()==="chef";  // recettes + quantités
 
 const ROLE_LABEL={admin:"Administrateur",manager:"Gérant",chef:"Chef cuisinier",cuisinier:"Cuisinier",preparateur:"Préparateur"};
+const ALLERGENES=[["gluten","Gluten"],["crustaces","Crustacés"],["oeufs","Œufs"],["poisson","Poisson"],["arachides","Arachides"],["soja","Soja"],["lait","Lait"],["fruits_coque","Fruits à coque"],["celeri","Céleri"],["moutarde","Moutarde"],["sesame","Sésame"],["sulfites","Sulfites"],["lupin","Lupin"],["mollusques","Mollusques"]];
+const ALLERG_LABEL=Object.fromEntries(ALLERGENES);
+const allergKeys=(s)=>s?String(s).split(",").map(x=>x.trim()).filter(Boolean):[];
 const TABS=[
   {id:"commandes",label:"Commandes",roles:["admin","manager","chef","cuisinier"]},
   {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef"]},
@@ -360,12 +363,16 @@ function renderCommandeDetail(c){
   const notesBox=c.notes?`<div style="background:var(--juste-bg);border:1px solid rgba(185,130,28,.35);border-left:4px solid var(--juste);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:14.5px"><b style="display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#7E5A12;margin-bottom:4px">Notes</b>${esc(c.notes)}</div>`:"";
   const clientBox=(c.client_tel||c.client_email)?`<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;line-height:1.8">🧾 Client${c.client_tel?` · ☎ <a href="tel:${esc(c.client_tel)}" style="color:var(--bottle-2)">${esc(c.client_tel)}</a>`:""}${c.client_email?` · ✉ <a href="mailto:${esc(c.client_email)}" style="color:var(--bottle-2)">${esc(c.client_email)}</a>`:""}</div>`:"";
   const ficheBox=(c.adresse||c.contact_nom||c.contact_tel||c.lieu_descriptif)?`<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;line-height:1.8">${c.adresse?`📍 ${esc(c.adresse)}<br>`:""}${c.lieu_descriptif?`🏛 ${esc(c.lieu_descriptif)}<br>`:""}${(c.contact_nom||c.contact_tel)?`👤 ${esc(c.contact_nom||"")}${c.contact_tel?` · ☎ <a href="tel:${esc(c.contact_tel)}" style="color:var(--bottle-2)">${esc(c.contact_tel)}</a>`:""}`:""}</div>`:"";
+  const cmdAllergKeys=new Set();const cmdAllergNotes=[];
+  (c.lignes||[]).forEach(l=>{allergKeys(l.allergenes).forEach(k=>cmdAllergKeys.add(k));if(l.allergenes_libre)cmdAllergNotes.push(l.allergenes_libre);});
+  const allergBox=(cmdAllergKeys.size||cmdAllergNotes.length)?`<div style="background:#fff;border:1px solid rgba(38,44,42,.15);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:13.5px"><b style="display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px">Allergènes</b>${[...cmdAllergKeys].map(k=>ALLERG_LABEL[k]||k).join(", ")}${cmdAllergNotes.length?`${cmdAllergKeys.size?" · ":""}${cmdAllergNotes.map(esc).join(" · ")}`:""}</div>`:"";
   $("modal").innerHTML=`
     <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${notesBox}
       ${clientBox}
       ${ficheBox}
+      ${allergBox}
       <h4>Recettes</h4>
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Personnes</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
@@ -482,6 +489,7 @@ async function openRecette(id){
     $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(r.nom)}</h3><div class="meta">Base de ${fmtN(r.portion_base)} personnes</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
         ${r.description?`<p style="font-size:14px;color:var(--ink-soft);margin-bottom:6px">${esc(r.description)}</p>`:""}
+        ${(allergKeys(r.allergenes).length||r.allergenes_libre)?`<div style="font-size:13.5px;margin-bottom:10px;color:var(--ink-soft)">🥜 <b>Allergènes :</b> ${allergKeys(r.allergenes).map(k=>ALLERG_LABEL[k]||k).join(", ")}${r.allergenes_libre?`${allergKeys(r.allergenes).length?" · ":""}${esc(r.allergenes_libre)}`:""}</div>`:""}
         <h4>Ingrédients (cuisine)</h4><table class="grid"><thead><tr><th>Ingrédient</th><th class="num">Quantité / base</th></tr></thead><tbody>${ing}</tbody></table>
         ${role()!=="cuisinier"?`<h4>Matériel</h4><table class="grid"><thead><tr><th>Matériel</th><th>Calcul</th><th class="num">Quantité</th></tr></thead><tbody>${mat}</tbody></table>`:""}
         ${canRecipes()?`<div style="margin-top:20px;display:flex;gap:10px"><button class="btn sm" id="recEdit">Modifier</button><button class="btn danger sm" id="recDel">Supprimer</button></div>`:""}
@@ -505,6 +513,9 @@ async function openRecetteEditor(id){
       <div class="field"><label>Nom</label><input id="reNom" value="${rec?esc(rec.nom):""}"></div>
       <div class="field"><label>Description</label><input id="reDesc" value="${rec&&rec.description?esc(rec.description):""}"></div>
       <div class="field"><label>Portion de base (personnes)</label><input id="reBase" type="number" min="1" value="${rec?esc(rec.portion_base):"10"}"></div>
+      <h4>Allergènes</h4>
+      <div id="reAllerg" style="display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px">${ALLERGENES.map(([k,l])=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;border:1px solid rgba(38,44,42,.18);border-radius:8px;padding:6px 10px;cursor:pointer;background:#fff"><input type="checkbox" value="${k}"> ${l}</label>`).join("")}</div>
+      <div class="field"><label>Précisions allergènes (optionnel)</label><input id="reAllergLibre" placeholder="ex. traces de fruits à coque" value="${rec&&rec.allergenes_libre?esc(rec.allergenes_libre):""}"></div>
       <h4>Ingrédients (cuisine)</h4><div id="reIng"></div><button class="btn ghost sm" id="reIngAdd" style="margin:4px 0 8px">+ Ingrédient</button>
       <h4>Matériel</h4><div id="reMat"></div><button class="btn ghost sm" id="reMatAdd" style="margin:4px 0 14px">+ Matériel</button>
       <button class="btn full" id="reSave"><span class="spin"></span><span class="label">${id?"Enregistrer":"Créer la recette"}</span></button>
@@ -515,13 +526,16 @@ async function openRecetteEditor(id){
   function matRow(sel,mode,q,cap){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select class="m-art">${matOpts}</select><select class="m-mode"><option value="proportionnel">Prorata</option><option value="par_palier">Palier</option></select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><input class="cap" type="number" min="1" placeholder="/N pers" value="${cap!=null?esc(cap):""}"><button class="rm">×</button>`;
     if(sel!=null)r.querySelector(".m-art").value=sel;const modeSel=r.querySelector(".m-mode"),capInp=r.querySelector(".cap");if(mode)modeSel.value=mode;const sync=()=>{capInp.style.display=modeSel.value==="par_palier"?"":"none";};modeSel.addEventListener("change",sync);sync();r.querySelector(".rm").addEventListener("click",()=>r.remove());matBox.appendChild(r);}
   if(rec){(rec.ingredients||[]).forEach(i=>ingRow(i.ingredient_id,i.quantite));(rec.materiels||[]).forEach(m=>matRow(m.materiel_id,m.mode,m.quantite,m.capacite));}
+  if(rec&&rec.allergenes){const set=new Set(allergKeys(rec.allergenes));$("reAllerg").querySelectorAll("input").forEach(c=>{if(set.has(c.value))c.checked=true;});}
   $("reIngAdd").addEventListener("click",()=>ingRow());$("reMatAdd").addEventListener("click",()=>matRow());
   $("reSave").addEventListener("click",async()=>{
     const m=$("reMsg");m.classList.remove("show");
     const nom=$("reNom").value.trim();if(!nom){m.textContent="Le nom est requis.";m.classList.add("show");return;}
     const ingredients=[...ingBox.querySelectorAll(".line-row")].map(r=>({ingredient_id:Number(r.querySelector("select").value),quantite:Number(r.querySelector(".qty").value)})).filter(x=>x.ingredient_id&&x.quantite>=0);
     const materiels=[...matBox.querySelectorAll(".line-row")].map(r=>{const mode=r.querySelector(".m-mode").value;return{materiel_id:Number(r.querySelector(".m-art").value),mode,quantite:Number(r.querySelector(".qty").value),capacite:mode==="par_palier"?Number(r.querySelector(".cap").value):null};}).filter(x=>x.materiel_id&&x.quantite>=0&&(x.mode!=="par_palier"||x.capacite>0));
-    const body={nom,description:$("reDesc").value.trim()||null,portion_base:Number($("reBase").value)||10,ingredients,materiels};
+    const allergenes=[...$("reAllerg").querySelectorAll("input:checked")].map(c=>c.value).join(",")||null;
+    const allergenes_libre=$("reAllergLibre").value.trim()||null;
+    const body={nom,description:$("reDesc").value.trim()||null,portion_base:Number($("reBase").value)||10,allergenes,allergenes_libre,ingredients,materiels};
     const btn=$("reSave");btn.classList.add("loading");btn.disabled=true;
     try{await api(id?`/api/recettes/${id}`:"/api/recettes",{method:id?"PUT":"POST",body});closeModal();toast(id?"Recette enregistrée.":"Recette créée.");renderRecettes();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}

@@ -29,7 +29,7 @@ router.get('/:id', ah(async (req, res) => {
   if (!c[0]) return res.status(404).json({ error: 'Commande introuvable' });
 
   const { rows: lignes } = await pool.query(
-    `SELECT cr.recette_id, r.nom, cr.nb_personnes
+    `SELECT cr.recette_id, r.nom, r.allergenes, r.allergenes_libre, cr.nb_personnes
        FROM commande_recettes cr JOIN recettes r ON r.id = cr.recette_id
       WHERE cr.commande_id = $1 ORDER BY r.nom`, [id]);
 
