@@ -146,4 +146,45 @@ router.put('/commandes/:id/boissons/retour', requireMaterielEditor, ah(async (re
   res.json({ ok: true });
 }));
 
+/* ---------- Matériel supplémentaire par commande ---------- */
+router.get('/commandes/:id/materiels-extra', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT cme.materiel_id, m.nom AS materiel, m.unite, cme.quantite
+     FROM commande_materiels_extra cme
+     JOIN materiels m ON m.id = cme.materiel_id
+     WHERE cme.commande_id = $1
+     ORDER BY m.nom`,
+    [req.params.id]
+  );
+  res.json(rows);
+}));
+
+router.put('/commandes/:id/materiels-extra', requireMaterielEditor, ah(async (req, res) => {
+  const cid = req.params.id;
+  const lignes = Array.isArray(req.body.materiels) ? req.body.materiels : [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM commande_materiels_extra WHERE commande_id = $1', [cid]);
+    for (const l of lignes) {
+      const mid = parseInt(l.materiel_id, 10);
+      const q = parseInt(l.quantite, 10) || 0;
+      if (Number.isNaN(mid) || q <= 0) continue;
+      await client.query(
+        `INSERT INTO commande_materiels_extra (commande_id, materiel_id, quantite)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (commande_id, materiel_id) DO UPDATE SET quantite = EXCLUDED.quantite`,
+        [cid, mid, q]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true });
+}));
+
 module.exports = router;

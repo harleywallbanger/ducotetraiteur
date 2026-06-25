@@ -54,6 +54,7 @@ const { pool: _migPool } = require('./db');
     'ALTER TABLE recettes ADD COLUMN IF NOT EXISTS allergenes_libre text',
     "CREATE TABLE IF NOT EXISTS boissons (id SERIAL PRIMARY KEY, nom TEXT UNIQUE NOT NULL, unite TEXT, stock INTEGER DEFAULT 0)",
     "CREATE TABLE IF NOT EXISTS commande_boissons (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, boisson_id INTEGER NOT NULL REFERENCES boissons(id) ON DELETE CASCADE, sortie INTEGER DEFAULT 0, retour INTEGER, conso_applique INTEGER, PRIMARY KEY (commande_id, boisson_id))",
+    "CREATE TABLE IF NOT EXISTS commande_materiels_extra (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, materiel_id INTEGER NOT NULL REFERENCES materiels(id) ON DELETE CASCADE, quantite INTEGER DEFAULT 0, PRIMARY KEY (commande_id, materiel_id))",
   ]) {
     try { await _migPool.query(sql); }
     catch (e) { console.error('Migration colonne:', e.message); }
