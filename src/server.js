@@ -46,6 +46,8 @@ const { pool: _migPool } = require('./db');
     'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS contact_nom text',
     'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS contact_tel text',
     'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS couverts integer',
+    'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_tel text',
+    'ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_email text',
   ]) {
     try { await _migPool.query(sql); }
     catch (e) { console.error('Migration colonne:', e.message); }
