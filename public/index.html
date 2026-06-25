@@ -358,11 +358,13 @@ function renderCommandeDetail(c){
   }
   const sections=cuisineFirst?(cuiSection()+(showMateriel?matSection():"")):((showMateriel?matSection():"")+cuiSection());
   const notesBox=c.notes?`<div style="background:var(--juste-bg);border:1px solid rgba(185,130,28,.35);border-left:4px solid var(--juste);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:14.5px"><b style="display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#7E5A12;margin-bottom:4px">Notes</b>${esc(c.notes)}</div>`:"";
+  const clientBox=(c.client_tel||c.client_email)?`<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;line-height:1.8">🧾 Client${c.client_tel?` · ☎ <a href="tel:${esc(c.client_tel)}" style="color:var(--bottle-2)">${esc(c.client_tel)}</a>`:""}${c.client_email?` · ✉ <a href="mailto:${esc(c.client_email)}" style="color:var(--bottle-2)">${esc(c.client_email)}</a>`:""}</div>`:"";
   const ficheBox=(c.adresse||c.contact_nom||c.contact_tel||c.lieu_descriptif)?`<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;line-height:1.8">${c.adresse?`📍 ${esc(c.adresse)}<br>`:""}${c.lieu_descriptif?`🏛 ${esc(c.lieu_descriptif)}<br>`:""}${(c.contact_nom||c.contact_tel)?`👤 ${esc(c.contact_nom||"")}${c.contact_tel?` · ☎ <a href="tel:${esc(c.contact_tel)}" style="color:var(--bottle-2)">${esc(c.contact_tel)}</a>`:""}`:""}</div>`:"";
   $("modal").innerHTML=`
     <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${notesBox}
+      ${clientBox}
       ${ficheBox}
       <h4>Recettes</h4>
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Couverts</th></tr></thead><tbody>${lignes}</tbody></table>
@@ -389,11 +391,15 @@ async function openCommandeForm(existing){
   let recettes=[];try{recettes=await api("/api/recettes");}catch(e){toast(e.message,true);return;}
   if(!recettes.length){toast("Aucune recette. Créez-en d'abord.",true);return;}
   let lieux=[];try{lieux=await api("/api/lieux");}catch(_){lieux=[];}
+  let clients=[];try{clients=await api("/api/clients");}catch(_){clients=[];}
   const opts=recettes.map(r=>`<option value="${r.id}">${esc(r.nom)}</option>`).join("");
   const dval=edit&&existing.date_event?String(existing.date_event).slice(0,10):"";
   openModal(`<div class="modal-head"><div><h3>${edit?"Modifier la commande":"Nouvelle commande"}</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
+      ${clients.length?`<div class="field"><label>Client déjà connu (optionnel)</label><select id="ncClientSel"><option value="">— Nouveau client —</option>${clients.map((c,i)=>`<option value="${i}">${esc(c.client)}</option>`).join("")}</select></div>`:""}
       <div class="field"><label>Client</label><input id="ncClient" placeholder="Nom du client / événement" value="${edit&&existing.client?esc(existing.client):""}"></div>
+      <div class="field"><label>Client — téléphone</label><input id="ncClientTel" placeholder="06…" value="${edit&&existing.client_tel?esc(existing.client_tel):""}"></div>
+      <div class="field"><label>Client — e-mail</label><input id="ncClientEmail" type="email" placeholder="client@exemple.fr" value="${edit&&existing.client_email?esc(existing.client_email):""}"></div>
       <div class="field"><label>Date de l'événement</label><input id="ncDate" type="date" required value="${dval}"></div>
       <div class="field"><label>Nombre de couverts (total)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50"${edit?"":' value="50"'}></div>
       ${lieux.length?`<div class="field"><label>Lieu déjà utilisé (optionnel)</label><select id="ncLieu"><option value="">— Nouveau lieu —</option>${lieux.map((l,i)=>`<option value="${i}">${esc(l.adresse)}</option>`).join("")}</select></div>`:""}
@@ -414,12 +420,13 @@ async function openCommandeForm(existing){
   $("ncAdd").addEventListener("click",()=>addLine());
   $("ncCouverts").addEventListener("input",()=>{const v=couvVal();box.querySelectorAll(".line-row .qty").forEach(i=>i.value=v);});
   if($("ncLieu"))$("ncLieu").addEventListener("change",()=>{const i=$("ncLieu").value;if(i==="")return;const l=lieux[Number(i)];if(!l)return;$("ncAdresse").value=l.adresse||"";$("ncLieuDesc").value=l.lieu_descriptif||"";$("ncContactNom").value=l.contact_nom||"";$("ncContactTel").value=l.contact_tel||"";});
+  if($("ncClientSel"))$("ncClientSel").addEventListener("change",()=>{const i=$("ncClientSel").value;if(i==="")return;const c=clients[Number(i)];if(!c)return;$("ncClient").value=c.client||"";$("ncClientTel").value=c.client_tel||"";$("ncClientEmail").value=c.client_email||"";});
   $("ncSave").addEventListener("click",async()=>{
     const m=$("ncMsg");m.classList.remove("show");const date_event=$("ncDate").value;
     const lignes=[...box.querySelectorAll(".line-row")].map(r=>({recette_id:Number(r.querySelector("select").value),nb_personnes:Number(r.querySelector(".qty").value)})).filter(l=>l.recette_id&&l.nb_personnes>0);
     if(!date_event||!lignes.length){m.textContent="Une date et au moins une recette sont requises.";m.classList.add("show");return;}
     const btn=$("ncSave");btn.classList.add("loading");btn.disabled=true;
-    const body={client:$("ncClient").value.trim()||null,date_event,notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lignes};
+    const body={client:$("ncClient").value.trim()||null,client_tel:$("ncClientTel").value.trim()||null,client_email:$("ncClientEmail").value.trim()||null,date_event,notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lignes};
     try{
       if(edit)await api(`/api/commandes/${existing.id}`,{method:"PUT",body});
       else await api("/api/commandes",{method:"POST",body});
@@ -579,7 +586,7 @@ function openPwd(id,nom){
 const prepDone={}; // {commandeId: Set(itemKey)} — local à la session
 async function renderPrep(){
   $("content").innerHTML=`<div class="head"><h2>Préparation</h2></div>
-    <p style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px">Commandes à venir. Touchez-en une pour cocher le matériel et la cuisine au fur et à mesure.</p>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px">Commandes à venir. Touchez-en une pour cocher le matériel et la cuisine ; le stock disponible et les manques sont indiqués sur chaque article de matériel.</p>
     <div class="tickets" id="prepList"><div class="state">Chargement…</div></div>`;
   const n=new Date(),p=x=>String(x).padStart(2,"0");
   const from=`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`;
@@ -598,8 +605,8 @@ async function openPrep(id){
     const c=await api(`/api/commandes/${id}`);const dt=parseDate(c.date_event);
     if(!prepDone[id])prepDone[id]=new Set();
     const items=[];
-    (c.materiel||[]).forEach(m=>items.push({key:"m"+m.materiel_id,label:m.materiel,q:`${fmtN(m.quantite)} ${m.unite||""}`}));
-    (c.cuisine||[]).forEach(i=>items.push({key:"c"+i.ingredient_id,label:i.ingredient,q:`${fmtN(i.quantite)} ${i.unite||""}`}));
+    (c.materiel||[]).forEach(m=>items.push({key:"m"+m.materiel_id,label:m.materiel,q:`${fmtN(m.quantite)} ${m.unite||""}`,mat:true,stock:num(m.stock),manque:num(m.manque)||0}));
+    (c.cuisine||[]).forEach(i=>items.push({key:"c"+i.ingredient_id,label:i.ingredient,q:`${fmtN(i.quantite)} ${i.unite||""}`,mat:false}));
     $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(c.client||"Commande")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"}):""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
         ${c.notes?`<p style="font-size:14px;color:var(--ink-soft);margin-bottom:10px">📝 ${esc(c.notes)}</p>`:""}
@@ -608,7 +615,9 @@ async function openPrep(id){
         <div id="prepItems"></div>
       </div>`;
     const box=$("prepItems");
-    box.innerHTML=items.map(it=>{const done=prepDone[id].has(it.key);return `<label class="check ${done?"done":""}" data-key="${it.key}"><input type="checkbox" ${done?"checked":""}><span>${esc(it.label)}</span><span class="q">${esc(it.q)}</span></label>`;}).join("")||`<div class="state">Rien à préparer pour cette commande.</div>`;
+    box.innerHTML=items.map(it=>{const done=prepDone[id].has(it.key);
+      const stockPill=it.mat?(it.manque>0?` <span class="pill pill-alert">manque ${fmtN(it.manque)}</span>`:(it.stock!=null?` <span class="pill">stock ${fmtN(it.stock)}</span>`:"")):"";
+      return `<label class="check ${done?"done":""}" data-key="${it.key}"><input type="checkbox" ${done?"checked":""}><span>${esc(it.label)}${stockPill}</span><span class="q">${esc(it.q)}</span></label>`;}).join("")||`<div class="state">Rien à préparer pour cette commande.</div>`;
     function refresh(){const tot=items.length,dn=prepDone[id].size;$("prepBar").style.width=(tot?Math.round(dn/tot*100):0)+"%";$("prepPct").textContent=tot?(dn===tot?"✓ Tout est prêt":`${dn} / ${tot} préparés`):"";}
     box.querySelectorAll(".check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[id].add(k);else prepDone[id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
     refresh();
