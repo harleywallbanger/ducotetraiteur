@@ -499,6 +499,7 @@ function printLivreur(c){
       <tr><th>Client</th><td>${e(c.client||"—")}${c.client_tel?` · ☎ ${e(c.client_tel)}`:""}</td></tr>
       <tr><th>Date</th><td>${e(dateStr)}</td></tr>
       <tr><th>Nombre de personnes</th><td><b>${pax!=null?fmtN(pax):"—"}</b></td></tr>
+      <tr><th>Type de prestation</th><td>${c.type_prestation==="livre"?"Livré (jetable)":"Buffet (vaisselle classique)"}</td></tr>
       <tr><th>Lieu de livraison</th><td>${e(lieu)}</td></tr>
       <tr><th>Contact sur place</th><td>${e(contact)}</td></tr>
     </tbody></table>
@@ -623,7 +624,7 @@ function renderCommandeDetail(c){
   const me=c.materiel_extra||[];
   const materielExtraBox=(me.length||canAddMateriel())?`<h4 style="margin-top:18px">Matériel supplémentaire</h4>${me.length?`<table class="grid"><thead><tr><th>Matériel</th><th class="num">Quantité</th></tr></thead><tbody>${me.map(m=>`<tr><td>${esc(m.materiel)}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:`<div class="state" style="padding:6px 0">Aucun matériel supplémentaire.</div>`}${canAddMateriel()?`<button class="btn sm ghost" id="btnMatExtra" style="margin-top:8px">Modifier le matériel supplémentaire</button>`:""}`:"";
   $("modal").innerHTML=`
-    <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""} · ${c.type_prestation==="livre"?"🚚 Livré":"🍽 Buffet"}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${notesBox}
       ${clientBox}
@@ -677,6 +678,7 @@ async function openCommandeForm(existing,prefill){
       <div class="field"><label>Client — e-mail</label><input id="ncClientEmail" type="email" placeholder="client@exemple.fr" value="${edit&&existing.client_email?esc(existing.client_email):(prefill&&prefill.client_email?esc(prefill.client_email):"")}"></div>
       <div class="field"><label>Date de l'événement</label><input id="ncDate" type="date" required value="${dval}"></div>
       <div class="field"><label>Nombre de personnes (PAX)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50"${edit?(existing.couverts!=null?` value="${existing.couverts}"`:""):' value="50"'}></div>
+      <div class="field"><label>Type de prestation</label><select id="ncType"><option value="buffet"${edit&&existing.type_prestation==="livre"?"":" selected"}>Buffet — vaisselle classique</option><option value="livre"${edit&&existing.type_prestation==="livre"?" selected":""}>Livré — jetable</option></select></div>
       ${lieux.length?`<div class="field"><label>Lieu déjà utilisé (optionnel)</label><select id="ncLieu"><option value="">— Nouveau lieu —</option>${lieux.map((l,i)=>`<option value="${i}">${esc(l.adresse)}</option>`).join("")}</select></div>`:""}
       <div class="field"><label>Adresse de l'événement</label><input id="ncAdresse" placeholder="Lieu / adresse complète" value="${edit&&existing.adresse?esc(existing.adresse):""}"></div>
       <div class="field"><label>Descriptif du lieu (équipements, accès…)</label><textarea id="ncLieuDesc" placeholder="Ex. cuisine équipée, bar avec tirage pression tête plate, accès par carte magnétique…">${edit&&existing.lieu_descriptif?esc(existing.lieu_descriptif):""}</textarea></div>
@@ -708,11 +710,13 @@ async function openCommandeForm(existing,prefill){
     const btn=$("ncSave");btn.classList.add("loading");btn.disabled=true;
     const body={client:$("ncClient").value.trim()||null,client_tel:$("ncClientTel").value.trim()||null,client_email:$("ncClientEmail").value.trim()||null,date_event,couverts:(parseInt($("ncCouverts").value,10)||null),notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lignes};
     const boissonsSortie=bbox?[...bbox.querySelectorAll(".line-row")].map(r=>({boisson_id:Number(r.querySelector("select").value),sortie:Number(r.querySelector(".qty").value)||0})).filter(x=>x.boisson_id):[];
+    const type_prestation=$("ncType")?$("ncType").value:"buffet";
     try{
       let cid;
       if(edit){await api(`/api/commandes/${existing.id}`,{method:"PUT",body});cid=existing.id;}
       else{const res=await api("/api/commandes",{method:"POST",body});cid=res&&res.id;}
       if(cid){try{await api(`/api/commandes/${cid}/boissons`,{method:"PUT",body:{boissons:boissonsSortie}});}catch(_){}}
+      if(cid){try{await api(`/api/commandes/${cid}/type-prestation`,{method:"PUT",body:{type_prestation}});}catch(_){}}
       closeModal();toast(edit?"Commande modifiée.":"Commande créée.");loadCmdList();
     }catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
@@ -762,9 +766,11 @@ async function renderStock(){
   if(canAddMateriel())$("newBoisson").addEventListener("click",openNewBoisson);
   try{
     const inv=await api("/api/inventaire");const a=inv.filter(x=>x.en_alerte).length;
+    let usageMap={};try{const us=await api("/api/materiels-usage");us.forEach(u=>{usageMap[u.id]=u.usage_type;});}catch(_){}
+    const usageChip=u=>{const lbl={normal:"Normal",jetable:"Jetable",les_deux:"Les deux"}[u||"les_deux"]||"Les deux";return `<span class="pill" style="background:var(--paper);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:600">${lbl}</span>`;};
     const banner=a?`<div class="legend2"><span><span class="pip" style="background:var(--court)"></span> ${a} article${a>1?"s":""} sous le seuil</span></div>`:`<div class="legend2"><span><span class="pip" style="background:var(--ok)"></span> Tout le matériel est au-dessus de son seuil</span></div>`;
-    const rows=inv.map(x=>`<tr class="${x.en_alerte?"alert":""}"><td>${esc(x.nom)}</td><td class="num">${fmtN(x.quantite_stock)} ${esc(x.unite||"")}</td><td class="num">${fmtN(x.seuil_alerte)}</td><td>${x.en_alerte?`<span class="pill pill-alert">à réapprovisionner</span>`:`<span class="status s-ok"><span class="pip"></span>OK</span>`}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-edit="${x.materiel_id}" data-nom="${esc(x.nom)}" data-stock="${esc(x.quantite_stock)}" data-seuil="${esc(x.seuil_alerte)}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?5:4}">Aucun matériel</td></tr>`;
-    $("stockBox").innerHTML=banner+`<table class="grid"><thead><tr><th>Matériel</th><th class="num">En stock</th><th class="num">Seuil</th><th>État</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${rows}</tbody></table>`;
+    const rows=inv.map(x=>`<tr class="${x.en_alerte?"alert":""}"><td>${esc(x.nom)}</td><td class="num">${fmtN(x.quantite_stock)} ${esc(x.unite||"")}</td><td class="num">${fmtN(x.seuil_alerte)}</td><td>${x.en_alerte?`<span class="pill pill-alert">à réapprovisionner</span>`:`<span class="status s-ok"><span class="pip"></span>OK</span>`}</td><td>${usageChip(usageMap[x.materiel_id])}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-edit="${x.materiel_id}" data-nom="${esc(x.nom)}" data-stock="${esc(x.quantite_stock)}" data-seuil="${esc(x.seuil_alerte)}" data-usage="${esc(usageMap[x.materiel_id]||"les_deux")}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?6:5}">Aucun matériel</td></tr>`;
+    $("stockBox").innerHTML=banner+`<table class="grid"><thead><tr><th>Matériel</th><th class="num">En stock</th><th class="num">Seuil</th><th>État</th><th>Usage</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${rows}</tbody></table>`;
     if(canAddMateriel())$("stockBox").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>editStock(b.dataset)));
     try{
       const bs=await api("/api/boissons");
@@ -775,17 +781,21 @@ async function renderStock(){
   }catch(e){$("stockBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
 }
 function editStock(d){
-  openModal(`<div class="modal-head"><div><h3>${esc(d.nom)}</h3><div class="meta">Stock et seuil d'alerte</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+  openModal(`<div class="modal-head"><div><h3>${esc(d.nom)}</h3><div class="meta">Stock, seuil et usage</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="field"><label>Quantité en stock</label><input id="esStock" type="number" min="0" step="any" value="${esc(d.stock)}"></div>
       <div class="field"><label>Seuil d'alerte</label><input id="esSeuil" type="number" min="0" step="any" value="${esc(d.seuil)}"></div>
+      <div class="field"><label>Usage selon le type de prestation</label><select id="esUsage"><option value="les_deux"${(!d.usage||d.usage==="les_deux")?" selected":""}>Les deux — compté dans tous les cas</option><option value="normal"${d.usage==="normal"?" selected":""}>Normal — buffet uniquement</option><option value="jetable"${d.usage==="jetable"?" selected":""}>Jetable — livré uniquement</option></select></div>
       <button class="btn full" id="esSave"><span class="spin"></span><span class="label">Enregistrer</span></button>
       <div class="msg err" id="esMsg"></div></div>`);
   $("esSave").addEventListener("click",async()=>{
     const m=$("esMsg");m.classList.remove("show");const quantite_stock=Number($("esStock").value),seuil_alerte=Number($("esSeuil").value);
     if(!(quantite_stock>=0)||!(seuil_alerte>=0)){m.textContent="Valeurs invalides.";m.classList.add("show");return;}
+    const usage_type=$("esUsage")?$("esUsage").value:null;
     const btn=$("esSave");btn.classList.add("loading");btn.disabled=true;
-    try{await api(`/api/materiels/${d.edit}/inventaire`,{method:"PUT",body:{quantite_stock,seuil_alerte}});closeModal();toast("Stock mis à jour.");renderStock();}
+    try{await api(`/api/materiels/${d.edit}/inventaire`,{method:"PUT",body:{quantite_stock,seuil_alerte}});
+        if(usage_type){try{await api(`/api/materiels/${d.edit}/usage`,{method:"PUT",body:{usage_type}});}catch(_){}}
+        closeModal();toast("Matériel mis à jour.");renderStock();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }
@@ -839,7 +849,7 @@ async function openRecette(id){
   try{
     const r=await api(`/api/recettes/${id}`);
     const ing=(r.ingredients||[]).map(i=>`<tr><td>${esc(i.nom)}</td><td class="num">${fmtN(i.quantite)} ${esc(i.unite||"")}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
-    const mat=(r.materiels||[]).map(m=>`<tr><td>${esc(m.nom)}</td><td>${m.mode==="par_palier"?`1 / ${fmtN(m.capacite)} pers.`:"proportionnel"}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")||`<tr><td colspan="3">—</td></tr>`;
+    const mat=(r.materiels||[]).map(m=>`<tr><td>${esc(m.nom)}</td><td>${m.mode==="par_palier"?`1 / ${fmtN(m.capacite)} pers.`:(m.mode==="par_couvert"?"par couvert (1/pers, mutualisé)":"proportionnel")}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")||`<tr><td colspan="3">—</td></tr>`;
     $("modal").innerHTML=`<div class="modal-head"><div><h3>${esc(r.nom)}</h3><div class="meta">Base de ${fmtN(r.portion_base)} personnes</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
         ${r.description?`<p style="font-size:14px;color:var(--ink-soft);margin-bottom:6px">${esc(r.description)}</p>`:""}
@@ -877,8 +887,8 @@ async function openRecetteEditor(id){
     </div>`);
   const ingBox=$("reIng"),matBox=$("reMat");
   function ingRow(sel,q){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${ingOpts}</select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><button class="rm">×</button>`;if(sel!=null)r.querySelector("select").value=sel;r.querySelector(".rm").addEventListener("click",()=>r.remove());ingBox.appendChild(r);}
-  function matRow(sel,mode,q,cap){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select class="m-art">${matOpts}</select><select class="m-mode"><option value="proportionnel">Prorata</option><option value="par_palier">Palier</option></select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><input class="cap" type="number" min="1" placeholder="/N pers" value="${cap!=null?esc(cap):""}"><button class="rm">×</button>`;
-    if(sel!=null)r.querySelector(".m-art").value=sel;const modeSel=r.querySelector(".m-mode"),capInp=r.querySelector(".cap");if(mode)modeSel.value=mode;const sync=()=>{capInp.style.display=modeSel.value==="par_palier"?"":"none";};modeSel.addEventListener("change",sync);sync();r.querySelector(".rm").addEventListener("click",()=>r.remove());matBox.appendChild(r);}
+  function matRow(sel,mode,q,cap){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select class="m-art">${matOpts}</select><select class="m-mode"><option value="proportionnel">Prorata</option><option value="par_palier">Palier</option><option value="par_couvert">Par couvert</option></select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><input class="cap" type="number" min="1" placeholder="/N pers" value="${cap!=null?esc(cap):""}"><button class="rm">×</button>`;
+    if(sel!=null)r.querySelector(".m-art").value=sel;const modeSel=r.querySelector(".m-mode"),capInp=r.querySelector(".cap"),qtyInp=r.querySelector(".qty");if(mode)modeSel.value=mode;const sync=()=>{capInp.style.display=modeSel.value==="par_palier"?"":"none";qtyInp.placeholder=modeSel.value==="par_couvert"?"qté/pers":"qté";};modeSel.addEventListener("change",sync);sync();r.querySelector(".rm").addEventListener("click",()=>r.remove());matBox.appendChild(r);}
   if(rec){(rec.ingredients||[]).forEach(i=>ingRow(i.ingredient_id,i.quantite));(rec.materiels||[]).forEach(m=>matRow(m.materiel_id,m.mode,m.quantite,m.capacite));}
   if(rec&&rec.allergenes){const set=new Set(allergKeys(rec.allergenes));$("reAllerg").querySelectorAll("input").forEach(c=>{if(set.has(c.value))c.checked=true;});}
   $("reIngAdd").addEventListener("click",()=>ingRow());$("reMatAdd").addEventListener("click",()=>matRow());
