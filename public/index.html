@@ -468,6 +468,11 @@ function printLivreur(c){
   w.document.close();w.focus();
   setTimeout(()=>{try{w.print();}catch(_){}},350);
 }
+async function deleteCommande(id){
+  if(!confirm("Supprimer définitivement cette commande ?"))return;
+  try{await api(`/api/commandes/${id}`,{method:"DELETE"});closeModal();toast("Commande supprimée.");loadCmdList();}
+  catch(e){toast(e.message,true);}
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
