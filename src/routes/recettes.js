@@ -36,7 +36,7 @@ async function insertLignes(client, recetteId, ingredients = [], materiels = [])
       'INSERT INTO recette_ingredients (recette_id, ingredient_id, quantite) VALUES ($1, $2, $3)',
       [recetteId, ing.ingredient_id, ing.quantite]);
   for (const m of materiels) {
-    const mode = m.mode === 'par_palier' ? 'par_palier' : 'proportionnel';
+    const mode = ['par_palier','par_couvert'].includes(m.mode) ? m.mode : 'proportionnel';
     const capacite = mode === 'par_palier' ? m.capacite : null;
     await client.query(
       'INSERT INTO recette_materiels (recette_id, materiel_id, mode, quantite, capacite) VALUES ($1, $2, $3, $4, $5)',
