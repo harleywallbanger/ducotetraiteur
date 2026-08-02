@@ -218,4 +218,53 @@ router.put('/materiels/:id/usage', requireMaterielEditor, ah(async (req, res) =>
   res.json(rows[0]);
 }));
 
+/* ---- Matériel laissé sur place : sortie / récupération ---- */
+
+// État de sortie d'une commande
+router.get('/commandes/:id/materiel-sortie', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT s.materiel_id, m.nom AS materiel, m.unite, s.quantite, s.sorti_le, s.recupere_le
+       FROM commande_materiel_sortie s
+       JOIN materiels m ON m.id = s.materiel_id
+      WHERE s.commande_id = $1
+      ORDER BY m.nom`, [req.params.id]);
+  res.json(rows);
+}));
+
+// Déclarer le matériel sorti (fige les besoins effectifs du moment)
+router.post('/commandes/:id/materiel-sortie', requireMaterielEditor, ah(async (req, res) => {
+  const id = req.params.id;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO commande_materiel_sortie (commande_id, materiel_id, quantite, sorti_le, recupere_le)
+         SELECT commande_id, materiel_id, quantite, CURRENT_DATE, NULL
+           FROM besoins_materiel_effectif
+          WHERE commande_id = $1 AND quantite > 0
+       ON CONFLICT (commande_id, materiel_id)
+         DO UPDATE SET quantite = EXCLUDED.quantite, sorti_le = CURRENT_DATE, recupere_le = NULL`, [id]);
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  res.json({ ok: true });
+}));
+
+// Déclarer la récupération (retour de tout le matériel encore sorti)
+router.post('/commandes/:id/materiel-recuperation', requireMaterielEditor, ah(async (req, res) => {
+  await pool.query(
+    `UPDATE commande_materiel_sortie SET recupere_le = CURRENT_DATE
+      WHERE commande_id = $1 AND recupere_le IS NULL`, [req.params.id]);
+  res.json({ ok: true });
+}));
+
+// Quantités actuellement sorties par matériel (pour le stock disponible)
+router.get('/materiels-sorties', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT materiel_id, SUM(quantite) AS sorti
+       FROM commande_materiel_sortie
+      WHERE sorti_le IS NOT NULL AND recupere_le IS NULL
+      GROUP BY materiel_id`);
+  res.json(rows);
+}));
+
 module.exports = router;
