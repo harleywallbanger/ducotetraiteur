@@ -63,6 +63,11 @@ const { pool: _migPool } = require('./db');
       `CREATE OR REPLACE VIEW besoins_materiel_commande AS SELECT cr.commande_id, rm.materiel_id, m.nom AS materiel, m.unite, SUM(CASE rm.mode WHEN 'proportionnel' THEN rm.quantite * cr.nb_personnes::NUMERIC / r.portion_base WHEN 'par_palier' THEN CEIL(cr.nb_personnes::NUMERIC / rm.capacite) * rm.quantite ELSE 0 END) + COALESCE(MAX(CASE WHEN rm.mode = 'par_couvert' THEN rm.quantite * COALESCE(co.couverts, cr.nb_personnes)::NUMERIC END), 0) AS quantite_totale FROM commande_recettes cr JOIN commandes co ON co.id = cr.commande_id JOIN recettes r ON r.id = cr.recette_id JOIN recette_materiels rm ON rm.recette_id = r.id JOIN materiels m ON m.id = rm.materiel_id WHERE (COALESCE(co.type_prestation,'buffet') = 'buffet' AND COALESCE(m.usage_type,'les_deux') IN ('normal','les_deux')) OR (COALESCE(co.type_prestation,'buffet') = 'livre' AND COALESCE(m.usage_type,'les_deux') IN ('jetable','les_deux')) GROUP BY cr.commande_id, rm.materiel_id, m.nom, m.unite`,
       "CREATE TABLE IF NOT EXISTS commande_materiel_sortie (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, materiel_id INTEGER NOT NULL REFERENCES materiels(id) ON DELETE CASCADE, quantite NUMERIC NOT NULL DEFAULT 0, sorti_le DATE, recupere_le DATE, PRIMARY KEY (commande_id, materiel_id))",
       "CREATE TABLE IF NOT EXISTS commande_materiel_location (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, materiel_id INTEGER NOT NULL REFERENCES materiels(id) ON DELETE CASCADE, quantite NUMERIC NOT NULL DEFAULT 0, fournisseur TEXT, PRIMARY KEY (commande_id, materiel_id))",
+      "CREATE TABLE IF NOT EXISTS camions (id SERIAL PRIMARY KEY, nom TEXT NOT NULL, hayon BOOLEAN DEFAULT false, frigo BOOLEAN DEFAULT false, capacite TEXT)",
+      "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_hayon BOOLEAN DEFAULT false",
+      "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_frigo BOOLEAN DEFAULT false",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS camion_id INTEGER REFERENCES camions(id) ON DELETE SET NULL",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS transport_refrigere BOOLEAN DEFAULT false",
   ]) {
     try { await _migPool.query(sql); }
     catch (e) { console.error('Migration colonne:', e.message); }

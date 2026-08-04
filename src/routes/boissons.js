@@ -304,4 +304,94 @@ router.put('/commandes/:id/materiel-location', requireMaterielEditor, ah(async (
   res.json({ ok: true });
 }));
 
+/* ---- Transport : camions + attributs matériel + affectation commande ---- */
+
+// Catalogue camions
+router.get('/camions', ah(async (req, res) => {
+  const { rows } = await pool.query('SELECT id, nom, hayon, frigo, capacite FROM camions ORDER BY nom');
+  res.json(rows);
+}));
+router.post('/camions', requireMaterielEditor, ah(async (req, res) => {
+  const nom = String((req.body && req.body.nom) || '').trim();
+  if (!nom) return res.status(400).json({ error: 'Nom requis' });
+  const hayon = !!(req.body && req.body.hayon);
+  const frigo = !!(req.body && req.body.frigo);
+  const capacite = (req.body && req.body.capacite != null && String(req.body.capacite).trim() !== '') ? String(req.body.capacite).trim() : null;
+  const { rows } = await pool.query(
+    'INSERT INTO camions (nom, hayon, frigo, capacite) VALUES ($1,$2,$3,$4) RETURNING id, nom, hayon, frigo, capacite',
+    [nom, hayon, frigo, capacite]);
+  res.status(201).json(rows[0]);
+}));
+router.put('/camions/:id', requireMaterielEditor, ah(async (req, res) => {
+  const nom = String((req.body && req.body.nom) || '').trim();
+  if (!nom) return res.status(400).json({ error: 'Nom requis' });
+  const hayon = !!(req.body && req.body.hayon);
+  const frigo = !!(req.body && req.body.frigo);
+  const capacite = (req.body && req.body.capacite != null && String(req.body.capacite).trim() !== '') ? String(req.body.capacite).trim() : null;
+  const { rows } = await pool.query(
+    'UPDATE camions SET nom=$1, hayon=$2, frigo=$3, capacite=$4 WHERE id=$5 RETURNING id, nom, hayon, frigo, capacite',
+    [nom, hayon, frigo, capacite, req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Camion introuvable' });
+  res.json(rows[0]);
+}));
+router.delete('/camions/:id', requireMaterielEditor, ah(async (req, res) => {
+  await pool.query('DELETE FROM camions WHERE id=$1', [req.params.id]);
+  res.status(204).end();
+}));
+
+// Attributs transport du matériel (hayon/frigo requis)
+router.get('/materiels-transport', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT id, nom, COALESCE(necessite_hayon,false) AS necessite_hayon, COALESCE(necessite_frigo,false) AS necessite_frigo FROM materiels ORDER BY nom');
+  res.json(rows);
+}));
+router.put('/materiels/:id/transport', requireMaterielEditor, ah(async (req, res) => {
+  const hayon = !!(req.body && req.body.necessite_hayon);
+  const frigo = !!(req.body && req.body.necessite_frigo);
+  const { rows } = await pool.query(
+    'UPDATE materiels SET necessite_hayon=$1, necessite_frigo=$2 WHERE id=$3 RETURNING id, nom, necessite_hayon, necessite_frigo',
+    [hayon, frigo, req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Matériel introuvable' });
+  res.json(rows[0]);
+}));
+
+// Affectation transport d'une commande
+router.put('/commandes/:id/transport', requireMaterielEditor, ah(async (req, res) => {
+  const camion_id = (req.body && req.body.camion_id) ? Number(req.body.camion_id) : null;
+  const refrig = !!(req.body && req.body.transport_refrigere);
+  const { rows } = await pool.query(
+    'UPDATE commandes SET camion_id=$1, transport_refrigere=$2 WHERE id=$3 RETURNING id',
+    [camion_id, refrig, req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable' });
+  res.json({ ok: true });
+}));
+// État transport d'une commande + besoins calculés + alertes
+router.get('/commandes/:id/transport', ah(async (req, res) => {
+  const id = req.params.id;
+  const { rows: cr } = await pool.query(
+    'SELECT camion_id, COALESCE(transport_refrigere,false) AS transport_refrigere FROM commandes WHERE id=$1', [id]);
+  if (!cr[0]) return res.status(404).json({ error: 'Commande introuvable' });
+  let camion = null;
+  if (cr[0].camion_id) {
+    const { rows: c } = await pool.query('SELECT id, nom, hayon, frigo, capacite FROM camions WHERE id=$1', [cr[0].camion_id]);
+    camion = c[0] || null;
+  }
+  const { rows: bes } = await pool.query(
+    `SELECT COALESCE(bool_or(m.necessite_hayon),false) AS hayon_requis,
+            COALESCE(bool_or(m.necessite_frigo),false) AS frigo_requis
+       FROM besoins_materiel_effectif b JOIN materiels m ON m.id = b.materiel_id
+      WHERE b.commande_id = $1`, [id]);
+  const hayon_requis = bes[0] ? bes[0].hayon_requis === true : false;
+  const frigo_requis = (bes[0] ? bes[0].frigo_requis === true : false) || cr[0].transport_refrigere === true;
+  res.json({
+    camion_id: cr[0].camion_id,
+    transport_refrigere: cr[0].transport_refrigere === true,
+    camion: camion,
+    hayon_requis: hayon_requis,
+    frigo_requis: frigo_requis,
+    alerte_hayon: hayon_requis && !!camion && !camion.hayon,
+    alerte_frigo: frigo_requis && !!camion && !camion.frigo
+  });
+}));
+
 module.exports = router;
