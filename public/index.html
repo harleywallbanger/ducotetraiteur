@@ -370,6 +370,7 @@ async function openCommande(id){
     try{c.boissons_lignes=await api(`/api/commandes/${id}/boissons`);}catch(_){c.boissons_lignes=[];}
     try{c.materiel_extra=await api(`/api/commandes/${id}/materiels-extra`);}catch(_){c.materiel_extra=[];}
     try{c.materiel_sortie=await api(`/api/commandes/${id}/materiel-sortie`);}catch(_){c.materiel_sortie=[];}
+    try{c.materiel_location=await api(`/api/commandes/${id}/materiel-location`);}catch(_){c.materiel_location=[];}
     renderCommandeDetail(c);
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
 }
@@ -482,6 +483,8 @@ function printLivreur(c){
   const boissonsBlock=bl.length?`<h2>Boissons (sortie / retour)</h2><table><thead><tr><th>Boisson</th><th class="n">Sortie</th><th class="n">Retour</th><th class="n">Conso</th></tr></thead><tbody>${bl.map(b=>`<tr><td>${e(b.nom)}</td><td class="n">${fmtN(b.sortie)}</td><td class="n">${b.retour==null?"":fmtN(b.retour)}</td><td class="n">${b.conso==null?"":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>`:"";
   const meL=c.materiel_extra||[];
   const materielExtraBlock=meL.length?`<h2>Matériel supplémentaire</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${meL.map(m=>`<tr><td>${e(m.materiel)}</td><td class="n">${fmtN(m.quantite)} ${e(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:"";
+  const loL=c.materiel_location||[];
+  const locationBlock=loL.length?`<h2>À louer</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th><th>Fournisseur</th></tr></thead><tbody>${loL.map(l=>`<tr><td>${e(l.materiel)}</td><td class="n">${fmtN(l.quantite)} ${e(l.unite||"")}</td><td>${l.fournisseur?e(l.fournisseur):"—"}</td></tr>`).join("")}</tbody></table>`:"";
   const footer=`<div class="ft">${e(SOCIETE.nom)} · ${e(SOCIETE.adresse)} · Tél ${e(SOCIETE.tel)} · Fax ${e(SOCIETE.fax)}</div>`;
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Feuille de préparation — ${e(c.client||"")} ${e(dateStr)}</title><style>
     *{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:28px;font-size:13px}
@@ -507,6 +510,7 @@ function printLivreur(c){
     <h2>Menu</h2><table><thead><tr><th>Plat</th><th class="n">Quantité</th></tr></thead><tbody>${menu}</tbody></table>
     <h2>Matériel</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${mats}</tbody></table>
     ${materielExtraBlock}
+    ${locationBlock}
     ${boissonsBlock}
     ${footer}
   </body></html>`);
@@ -588,6 +592,36 @@ async function openMaterielExtraEditor(c, onDone){
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }
+async function openLocationEditor(c, onDone){
+  let mats=[];
+  try{mats=await api("/api/materiels");}catch(e){toast(e.message,true);return;}
+  if(!mats.length){toast("Aucun matériel au catalogue.",true);return;}
+  const mopts=mats.map(m=>`<option value="${m.id}">${esc(m.nom)}</option>`).join("");
+  const cur=c.materiel_location||[];
+  const dejaLoue={};cur.forEach(l=>{dejaLoue[l.materiel_id]=num(l.quantite)||0;});
+  const sugg=(c.materiel||[]).map(m=>{const manque=num(m.manque)||0;const loue=dejaLoue[m.materiel_id]||0;return{materiel_id:m.materiel_id,reste:Math.max(manque-loue,0)};}).filter(x=>x.reste>0&&!(x.materiel_id in dejaLoue));
+  openModal(`<div class="modal-head"><div><h3>À louer</h3><div class="meta">${esc(c.client||"Commande")}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:10px">Matériel à louer pour couvrir le manque de cette commande. Les lignes en manque sont pré-remplies ; ajuste la quantité et indique le fournisseur.</p>
+      <div id="loBox"></div>
+      <button class="btn ghost sm" id="loAdd" style="margin:4px 0 16px">+ Ajouter une ligne</button>
+      <button class="btn full" id="loSave"><span class="spin"></span><span class="label">Enregistrer les locations</span></button>
+      <div class="msg err" id="loMsg"></div>
+    </div>`);
+  const box=$("loBox");
+  function row(mid,q,four){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${mopts}</select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><input class="four" type="text" placeholder="fournisseur" value="${four!=null?esc(four):""}" style="flex:1;min-width:0;font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#fff"><button class="rm">×</button>`;if(mid!=null)r.querySelector("select").value=mid;r.querySelector(".rm").addEventListener("click",()=>r.remove());box.appendChild(r);}
+  if(cur.length)cur.forEach(l=>row(l.materiel_id,l.quantite,l.fournisseur));
+  sugg.forEach(s=>row(s.materiel_id,s.reste,""));
+  if(!cur.length&&!sugg.length)row();
+  $("loAdd").addEventListener("click",()=>row());
+  $("loSave").addEventListener("click",async()=>{
+    const m=$("loMsg");m.classList.remove("show");
+    const arr=[...box.querySelectorAll(".line-row")].map(r=>({materiel_id:Number(r.querySelector("select").value),quantite:Number(r.querySelector(".qty").value)||0,fournisseur:(r.querySelector(".four").value||"").trim()||null})).filter(x=>x.materiel_id&&x.quantite>0);
+    const btn=$("loSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(`/api/commandes/${c.id}/materiel-location`,{method:"PUT",body:{locations:arr}});toast("Locations enregistrées.");if(typeof onDone==="function")onDone();else closeModal();}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 /* ---- Matériel laissé sur place : état + actions ---- */
 function sortieEtat(rows){rows=rows||[];let sortiLe=null,recupLe=null,enCours=false,aDejaSorti=false;rows.forEach(x=>{if(x.sorti_le){aDejaSorti=true;}if(x.sorti_le&&!x.recupere_le){enCours=true;sortiLe=x.sorti_le;}if(x.recupere_le){recupLe=x.recupere_le;}});return{enCours,aDejaSorti,sortiLe,recupLe,lignes:rows};}
 function dFR(s){if(!s)return"";const d=new Date(s);return isNaN(d)?s:d.toLocaleDateString("fr-FR");}
@@ -599,16 +633,25 @@ function materielSortieBox(c){const st=sortieEtat(c.materiel_sortie);const can=c
   return `<h4 style="margin-top:18px">Matériel laissé sur place</h4>${statut}${btns}`;}
 function wireSortie(c,reopen){const s=$("btnSortie");if(s)s.addEventListener("click",async()=>{s.disabled=true;try{await api(`/api/commandes/${c.id}/materiel-sortie`,{method:"POST"});toast("Matériel marqué comme sorti.");reopen();}catch(e){toast(e.message);s.disabled=false;}});
   const r=$("btnRecup");if(r)r.addEventListener("click",async()=>{r.disabled=true;try{await api(`/api/commandes/${c.id}/materiel-recuperation`,{method:"POST"});toast("Matériel marqué comme récupéré.");reopen();}catch(e){toast(e.message);r.disabled=false;}});}
+function materielLocationBox(c){const loc=c.materiel_location||[];const can=canAddMateriel();
+  if(!can&&!loc.length)return "";
+  const body=loc.length
+    ? `<table class="grid"><thead><tr><th>Matériel</th><th class="num">À louer</th><th>Fournisseur</th></tr></thead><tbody>${loc.map(l=>`<tr><td>${esc(l.materiel)}</td><td class="num">${fmtN(l.quantite)} ${esc(l.unite||"")}</td><td>${l.fournisseur?esc(l.fournisseur):"—"}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="state" style="padding:6px 0">Rien à louer.</div>`;
+  return `<h4 style="margin-top:18px">À louer</h4>${body}${can?`<button class="btn sm ghost" id="btnLocation" style="margin-top:8px">Gérer les locations…</button>`:""}`;}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
   const lignes=(c.lignes||[]).map(l=>`<tr><td>${esc(l.nom)}</td><td class="num">${fmtN(l.nb_personnes)}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
   function matSection(){
-    const rows=(c.materiel||[]).map(m=>{const manque=num(m.manque)||0;const tags=`${m.extra?' <span class="pill pill-alert">extra</span>':''}${m.ajuste?' <span class="pill">ajusté</span>':''}`;
+    const louMap={};(c.materiel_location||[]).forEach(l=>{louMap[l.materiel_id]=l;});
+    const rows=(c.materiel||[]).map(m=>{const manque=num(m.manque)||0;const loue=louMap[m.materiel_id]?num(louMap[m.materiel_id].quantite)||0:0;const manqueR=Math.max(manque-loue,0);
+      const four=louMap[m.materiel_id]&&louMap[m.materiel_id].fournisseur?` (${esc(louMap[m.materiel_id].fournisseur)})`:"";
+      const tags=`${m.extra?' <span class="pill pill-alert">extra</span>':''}${m.ajuste?' <span class="pill">ajusté</span>':''}${loue>0?` <span class="pill">à louer ${fmtN(loue)}${four}</span>`:''}`;
       const qcell=editable
         ? `<input class="qedit" type="number" min="0" step="any" value="${esc(m.quantite)}" data-mat="${m.materiel_id}"> ${esc(m.unite||"")} ${m.ajuste?`<button class="mini rs" title="Revenir au calcul auto" data-rsmat="${m.materiel_id}">↺</button>`:""}`
         : `${fmtN(m.quantite)} ${esc(m.unite||"")}`;
-      return `<tr class="${manque>0?"alert":""}"><td>${esc(m.materiel)}${tags}</td><td class="num">${qcell}</td><td class="num">${fmtN(m.stock)}</td><td class="num">${manque>0?fmtN(manque):"—"}</td></tr>`;}).join("")||`<tr><td colspan="4">Aucun matériel</td></tr>`;
+      return `<tr class="${manqueR>0?"alert":""}"><td>${esc(m.materiel)}${tags}</td><td class="num">${qcell}</td><td class="num">${fmtN(m.stock)}</td><td class="num">${manqueR>0?fmtN(manqueR):"—"}</td></tr>`;}).join("")||`<tr><td colspan="4">Aucun matériel</td></tr>`;
     return `<h4>Matériel — besoins effectifs${editable?` <span class="ro-note">quantités modifiables</span>`:""}</h4><table class="grid"><thead><tr><th>Matériel</th><th class="num">Besoin</th><th class="num">Stock</th><th class="num">Manque</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
   function cuiSection(){
@@ -647,6 +690,7 @@ function renderCommandeDetail(c){
       ${sections}
       ${boissonsBox}
       ${materielExtraBox}
+      ${materielLocationBox(c)}
       ${materielSortieBox(c)}
       <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prCuisine">🖨 Cuisine</button><button class="btn sm ghost" id="prMateriel">🖨 Matériel</button><button class="btn sm ghost" id="prAllerg">🖨 Allergènes</button><button class="btn sm" id="prAll">🖨 Tout imprimer</button></div>
       ${canOps()?`<div style="margin-top:12px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
@@ -670,6 +714,7 @@ function renderCommandeDetail(c){
   $("prAll").addEventListener("click",()=>printFiche(c,"all"));
   if($("btnRetour"))$("btnRetour").addEventListener("click",()=>openRetour(c,()=>openCommande(c.id)));
   if($("btnMatExtra"))$("btnMatExtra").addEventListener("click",()=>openMaterielExtraEditor(c,()=>openCommande(c.id)));
+  if($("btnLocation"))$("btnLocation").addEventListener("click",()=>openLocationEditor(c,()=>openCommande(c.id)));
   wireSortie(c,()=>openCommande(c.id));
 }
 
@@ -1000,12 +1045,14 @@ async function openPrep(id){
     try{c.boissons_lignes=await api(`/api/commandes/${id}/boissons`);}catch(_){c.boissons_lignes=[];}
     try{c.materiel_extra=await api(`/api/commandes/${id}/materiels-extra`);}catch(_){c.materiel_extra=[];}
     try{c.materiel_sortie=await api(`/api/commandes/${id}/materiel-sortie`);}catch(_){c.materiel_sortie=[];}
+    try{c.materiel_location=await api(`/api/commandes/${id}/materiel-location`);}catch(_){c.materiel_location=[];}
     if(!prepDone[id])prepDone[id]=new Set();
+    const louMapP={};(c.materiel_location||[]).forEach(l=>{louMapP[l.materiel_id]=num(l.quantite)||0;});
     const renderItem=(it)=>{const done=prepDone[id].has(it.key);
-      const stockPill=it.mat?(it.manque>0?` <span class="pill pill-alert">manque ${fmtN(it.manque)}</span>`:(it.stock!=null?` <span class="pill">stock ${fmtN(it.stock)}</span>`:"")):"";
+      const stockPill=it.mat?(it.manque>0?` <span class="pill pill-alert">manque ${fmtN(it.manque)}</span>`:(it.loue>0?` <span class="pill">à louer ${fmtN(it.loue)}</span>`:(it.stock!=null?` <span class="pill">stock ${fmtN(it.stock)}</span>`:""))):"";
       return `<label class="check ${done?"done":""}" data-key="${it.key}"><input type="checkbox" ${done?"checked":""}><span>${esc(it.label)}${stockPill}</span><span class="q">${esc(it.q)}</span></label>`;};
     const recItems=(c.lignes||[]).map(l=>({key:"r"+l.recette_id,label:l.nom,q:`${fmtN(l.nb_personnes)}`,mat:false}));
-    const matItems=(c.materiel||[]).map(m=>({key:"m"+m.materiel_id,label:m.materiel,q:`${fmtN(m.quantite)} ${m.unite||""}`,mat:true,stock:num(m.stock),manque:num(m.manque)||0}));
+    const matItems=(c.materiel||[]).map(m=>{const loue=louMapP[m.materiel_id]||0;const manqueR=Math.max((num(m.manque)||0)-loue,0);return{key:"m"+m.materiel_id,label:m.materiel,q:`${fmtN(m.quantite)} ${m.unite||""}`,mat:true,stock:num(m.stock),manque:manqueR,loue};});
     const total=recItems.length+matItems.length;
     const pax=num(c.couverts);
     const headInfo=[c.adresse?`📍 ${esc(c.adresse)}`:"",pax!=null?`👥 ${fmtN(pax)} PAX`:""].filter(Boolean).join(" · ");
@@ -1024,6 +1071,7 @@ async function openPrep(id){
         <button class="btn sm ghost" id="prepMatExtra" style="margin-top:8px">Modifier le matériel supplémentaire</button>
         ${(c.boissons_lignes||[]).length?`<h4 style="margin-top:18px">Boissons (sortie / retour)</h4><table class="grid"><thead><tr><th>Boisson</th><th class="num">Sortie</th><th class="num">Retour</th><th class="num">Conso</th></tr></thead><tbody>${c.boissons_lignes.map(b=>`<tr><td>${esc(b.nom)}</td><td class="num">${fmtN(b.sortie)}</td><td class="num">${b.retour==null?"—":fmtN(b.retour)}</td><td class="num">${b.conso==null?"—":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>`:`<h4 style="margin-top:18px">Boissons</h4><div class="state" style="padding:6px 0">Aucune boisson sur cette commande.</div>`}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn sm ghost" id="prepBoissons">Modifier les boissons</button>${(c.boissons_lignes||[]).length?`<button class="btn sm ghost" id="prepRetour">Retour J+1…</button>`:""}</div>
+        ${materielLocationBox(c)}
         ${materielSortieBox(c)}
         <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prepPrint">🖨 Imprimer la feuille</button></div>
       </div>`;
@@ -1032,6 +1080,7 @@ async function openPrep(id){
     if($("prepPrint"))$("prepPrint").addEventListener("click",()=>printLivreur(c));
     if($("prepBoissons"))$("prepBoissons").addEventListener("click",()=>openBoissonsEditor(c,()=>openPrep(id)));
     if($("prepMatExtra"))$("prepMatExtra").addEventListener("click",()=>openMaterielExtraEditor(c,()=>openPrep(id)));
+    if($("btnLocation"))$("btnLocation").addEventListener("click",()=>openLocationEditor(c,()=>openPrep(id)));
     if($("prepRetour"))$("prepRetour").addEventListener("click",()=>openRetour(c,()=>openPrep(id)));
     wireSortie(c,()=>openPrep(id));
     function refresh(){const dn=prepDone[id].size;$("prepBar").style.width=(total?Math.round(dn/total*100):0)+"%";$("prepPct").textContent=total?(dn===total?"✓ Tout est prêt":`${dn} / ${total} préparés`):"";}
