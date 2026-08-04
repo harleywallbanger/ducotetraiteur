@@ -379,6 +379,7 @@ async function openCommande(id){
     try{c.materiel_extra=await api(`/api/commandes/${id}/materiels-extra`);}catch(_){c.materiel_extra=[];}
     try{c.materiel_sortie=await api(`/api/commandes/${id}/materiel-sortie`);}catch(_){c.materiel_sortie=[];}
     try{c.materiel_location=await api(`/api/commandes/${id}/materiel-location`);}catch(_){c.materiel_location=[];}
+    try{c.transport=await api(`/api/commandes/${id}/transport`);}catch(_){c.transport=null;}
     renderCommandeDetail(c);
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
 }
@@ -493,6 +494,8 @@ function printLivreur(c){
   const materielExtraBlock=meL.length?`<h2>Matériel supplémentaire</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${meL.map(m=>`<tr><td>${e(m.materiel)}</td><td class="n">${fmtN(m.quantite)} ${e(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:"";
   const loL=c.materiel_location||[];
   const locationBlock=loL.length?`<h2>À louer</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th><th>Fournisseur</th></tr></thead><tbody>${loL.map(l=>`<tr><td>${e(l.materiel)}</td><td class="n">${fmtN(l.quantite)} ${e(l.unite||"")}</td><td>${l.fournisseur?e(l.fournisseur):"—"}</td></tr>`).join("")}</tbody></table>`:"";
+  const tr=c.transport||{};const trCam=tr.camion;
+  const transportBlock=(trCam||tr.hayon_requis||tr.frigo_requis)?`<h2>Transport</h2><table><tbody><tr><th style="width:170px">Camion</th><td>${trCam?e(trCam.nom)+(trCam.capacite?" · "+e(trCam.capacite):""):"— non assigné —"}</td></tr><tr><th>Équipements requis</th><td>${[tr.hayon_requis?"hayon":"",tr.frigo_requis?"réfrigéré":""].filter(Boolean).join(" · ")||"aucun particulier"}</td></tr>${trCam?`<tr><th>Équipements du camion</th><td>${[trCam.hayon?"hayon":"",trCam.frigo?"frigo":""].filter(Boolean).join(" · ")||"aucun"}</td></tr>`:""}${(tr.alerte_hayon||tr.alerte_frigo)?`<tr><th>⚠️ Alerte</th><td>${[tr.alerte_hayon?"pas de hayon":"",tr.alerte_frigo?"non réfrigéré":""].filter(Boolean).join(" · ")}</td></tr>`:""}</tbody></table>`:"";
   const footer=`<div class="ft">${e(SOCIETE.nom)} · ${e(SOCIETE.adresse)} · Tél ${e(SOCIETE.tel)} · Fax ${e(SOCIETE.fax)}</div>`;
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Feuille de préparation — ${e(c.client||"")} ${e(dateStr)}</title><style>
     *{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:28px;font-size:13px}
@@ -519,6 +522,7 @@ function printLivreur(c){
     <h2>Matériel</h2><table><thead><tr><th>Matériel</th><th class="n">Quantité</th></tr></thead><tbody>${mats}</tbody></table>
     ${materielExtraBlock}
     ${locationBlock}
+    ${transportBlock}
     ${boissonsBlock}
     ${footer}
   </body></html>`);
@@ -647,6 +651,35 @@ function materielLocationBox(c){const loc=c.materiel_location||[];const can=canA
     ? `<table class="grid"><thead><tr><th>Matériel</th><th class="num">À louer</th><th>Fournisseur</th></tr></thead><tbody>${loc.map(l=>`<tr><td>${esc(l.materiel)}</td><td class="num">${fmtN(l.quantite)} ${esc(l.unite||"")}</td><td>${l.fournisseur?esc(l.fournisseur):"—"}</td></tr>`).join("")}</tbody></table>`
     : `<div class="state" style="padding:6px 0">Rien à louer.</div>`;
   return `<h4 style="margin-top:18px">À louer</h4>${body}${can?`<button class="btn sm ghost" id="btnLocation" style="margin-top:8px">Gérer les locations…</button>`:""}`;}
+/* ---- Transport : camion assigné + alertes ---- */
+function transportBox(c){const t=c.transport||{};const cam=t.camion;const can=canAddMateriel();
+  const besoins=[];if(t.hayon_requis)besoins.push("🛗 hayon");if(t.frigo_requis)besoins.push("❄️ réfrigéré");
+  const body=cam
+    ? `<div class="state" style="padding:6px 0"><b>${esc(cam.nom)}</b>${cam.capacite?` · ${esc(cam.capacite)}`:""}${cam.hayon?" · 🛗 hayon":""}${cam.frigo?" · ❄️ frigo":""}</div>`
+    : `<div class="state" style="padding:6px 0">Aucun camion assigné.</div>`;
+  const besoinsTxt=`<div class="ro-note" style="margin:2px 0">Besoins transport : ${besoins.length?besoins.join(" · "):"aucun particulier"}</div>`;
+  let alerts="";
+  if(t.alerte_hayon)alerts+=`<div class="pill pill-alert" style="display:inline-block;margin:4px 4px 0 0">⚠️ Ce camion n'a pas de hayon</div>`;
+  if(t.alerte_frigo)alerts+=`<div class="pill pill-alert" style="display:inline-block;margin:4px 4px 0 0">⚠️ Ce camion n'est pas réfrigéré</div>`;
+  return `<h4 style="margin-top:18px">Transport</h4>${body}${besoinsTxt}${alerts}${can?`<div style="margin-top:8px"><button class="btn sm ghost" id="btnTransport">Modifier le transport…</button></div>`:""}`;}
+async function openTransportEditor(c,onDone){
+  let cams=[];try{cams=await api("/api/camions");}catch(e){toast(e.message,true);return;}
+  const t=c.transport||{};
+  openModal(`<div class="modal-head"><div><h3>Transport</h3><div class="meta">${esc(c.client||"Commande")}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Camion</label><select id="trCamion"><option value="">— Non assigné —</option>${cams.map(x=>`<option value="${x.id}"${String(t.camion_id)===String(x.id)?" selected":""}>${esc(x.nom)}${x.hayon?" · hayon":""}${x.frigo?" · frigo":""}</option>`).join("")}</select></div>
+      <div class="field"><label class="check"><input type="checkbox" id="trRefrig"${t.transport_refrigere?" checked":""}><span>❄️ Transport réfrigéré nécessaire</span></label></div>
+      ${cams.length?"":`<div class="ro-note">Aucun camion au catalogue. Ajoute-en dans Stock → + Camion.</div>`}
+      <button class="btn full" id="trSave"><span class="spin"></span><span class="label">Enregistrer</span></button>
+      <div class="msg err" id="trMsg"></div></div>`);
+  $("trSave").addEventListener("click",async()=>{
+    const m=$("trMsg");m.classList.remove("show");
+    const camion_id=$("trCamion").value?Number($("trCamion").value):null;const transport_refrigere=$("trRefrig").checked;
+    const btn=$("trSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(`/api/commandes/${c.id}/transport`,{method:"PUT",body:{camion_id,transport_refrigere}});toast("Transport enregistré.");if(typeof onDone==="function")onDone();else closeModal();}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -700,6 +733,7 @@ function renderCommandeDetail(c){
       ${materielExtraBox}
       ${materielLocationBox(c)}
       ${materielSortieBox(c)}
+      ${transportBox(c)}
       <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prCuisine">🖨 Cuisine</button><button class="btn sm ghost" id="prMateriel">🖨 Matériel</button><button class="btn sm ghost" id="prAllerg">🖨 Allergènes</button><button class="btn sm" id="prAll">🖨 Tout imprimer</button></div>
       ${canOps()?`<div style="margin-top:12px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
     </div>`;
@@ -723,6 +757,7 @@ function renderCommandeDetail(c){
   if($("btnRetour"))$("btnRetour").addEventListener("click",()=>openRetour(c,()=>openCommande(c.id)));
   if($("btnMatExtra"))$("btnMatExtra").addEventListener("click",()=>openMaterielExtraEditor(c,()=>openCommande(c.id)));
   if($("btnLocation"))$("btnLocation").addEventListener("click",()=>openLocationEditor(c,()=>openCommande(c.id)));
+  if($("btnTransport"))$("btnTransport").addEventListener("click",()=>openTransportEditor(c,()=>openCommande(c.id)));
   wireSortie(c,()=>openCommande(c.id));
 }
 
@@ -733,6 +768,7 @@ async function openCommandeForm(existing,prefill){
   let lieux=[];try{lieux=await api("/api/lieux");}catch(_){lieux=[];}
   let clients=[];try{clients=await api("/api/clients");}catch(_){clients=[];}
   let boissons=[];try{boissons=await api("/api/boissons");}catch(_){boissons=[];}
+  let camions=[];try{camions=await api("/api/camions");}catch(_){camions=[];}
   let existBoissons=[];if(edit){try{existBoissons=await api(`/api/commandes/${existing.id}/boissons`);}catch(_){}}
   const bopts=boissons.map(b=>`<option value="${b.id}">${esc(b.nom)}</option>`).join("");
   const opts=recettes.map(r=>`<option value="${r.id}">${esc(r.nom)}</option>`).join("");
@@ -746,6 +782,8 @@ async function openCommandeForm(existing,prefill){
       <div class="field"><label>Date de l'événement</label><input id="ncDate" type="date" required value="${dval}"></div>
       <div class="field"><label>Nombre de personnes (PAX)</label><input id="ncCouverts" type="number" min="1" placeholder="ex. 50"${edit?(existing.couverts!=null?` value="${existing.couverts}"`:""):' value="50"'}></div>
       <div class="field"><label>Type de prestation</label><select id="ncType"><option value="buffet"${edit&&existing.type_prestation==="livre"?"":" selected"}>Buffet — vaisselle classique</option><option value="livre"${edit&&existing.type_prestation==="livre"?" selected":""}>Livré — jetable</option></select></div>
+      <div class="field"><label>Camion (transport)</label><select id="ncCamion"><option value="">— Non assigné —</option>${camions.map(c=>`<option value="${c.id}"${edit&&String(existing.camion_id)===String(c.id)?" selected":""}>${esc(c.nom)}${c.hayon?" · hayon":""}${c.frigo?" · frigo":""}</option>`).join("")}</select></div>
+      <div class="field"><label class="check"><input type="checkbox" id="ncRefrig"${edit&&existing.transport_refrigere?" checked":""}><span>❄️ Transport réfrigéré nécessaire</span></label></div>
       ${lieux.length?`<div class="field"><label>Lieu déjà utilisé (optionnel)</label><select id="ncLieu"><option value="">— Nouveau lieu —</option>${lieux.map((l,i)=>`<option value="${i}">${esc(l.adresse)}</option>`).join("")}</select></div>`:""}
       <div class="field"><label>Adresse de l'événement</label><input id="ncAdresse" placeholder="Lieu / adresse complète" value="${edit&&existing.adresse?esc(existing.adresse):""}"></div>
       <div class="field"><label>Descriptif du lieu (équipements, accès…)</label><textarea id="ncLieuDesc" placeholder="Ex. cuisine équipée, bar avec tirage pression tête plate, accès par carte magnétique…">${edit&&existing.lieu_descriptif?esc(existing.lieu_descriptif):""}</textarea></div>
@@ -778,12 +816,15 @@ async function openCommandeForm(existing,prefill){
     const body={client:$("ncClient").value.trim()||null,client_tel:$("ncClientTel").value.trim()||null,client_email:$("ncClientEmail").value.trim()||null,date_event,couverts:(parseInt($("ncCouverts").value,10)||null),notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lignes};
     const boissonsSortie=bbox?[...bbox.querySelectorAll(".line-row")].map(r=>({boisson_id:Number(r.querySelector("select").value),sortie:Number(r.querySelector(".qty").value)||0})).filter(x=>x.boisson_id):[];
     const type_prestation=$("ncType")?$("ncType").value:"buffet";
+    const camion_id=($("ncCamion")&&$("ncCamion").value)?Number($("ncCamion").value):null;
+    const transport_refrigere=$("ncRefrig")?$("ncRefrig").checked:false;
     try{
       let cid;
       if(edit){await api(`/api/commandes/${existing.id}`,{method:"PUT",body});cid=existing.id;}
       else{const res=await api("/api/commandes",{method:"POST",body});cid=res&&res.id;}
       if(cid){try{await api(`/api/commandes/${cid}/boissons`,{method:"PUT",body:{boissons:boissonsSortie}});}catch(_){}}
       if(cid){try{await api(`/api/commandes/${cid}/type-prestation`,{method:"PUT",body:{type_prestation}});}catch(_){}}
+      if(cid){try{await api(`/api/commandes/${cid}/transport`,{method:"PUT",body:{camion_id,transport_refrigere}});}catch(_){}}
       closeModal();toast(edit?"Commande modifiée.":"Commande créée.");loadCmdList();
     }catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
@@ -827,18 +868,21 @@ function openNewIngredient(){
   });
 }
 async function renderStock(){
-  $("content").innerHTML=`<div class="head"><h2>Stock &amp; alertes</h2><div class="tools">${canAddMateriel()?`<button class="btn sm" id="newMat">+ Matériel</button> `:""}${canAddIngredient()?`<button class="btn sm ghost" id="newIng">+ Ingrédient</button> `:""}${canAddMateriel()?`<button class="btn sm ghost" id="newBoisson">+ Boisson</button>`:""}${(!canAddMateriel()&&!canAddIngredient())?`<span class="ro-note">consultation seule</span>`:""}</div></div><div id="stockBox"><div class="state">Chargement…</div></div>`;
+  $("content").innerHTML=`<div class="head"><h2>Stock &amp; alertes</h2><div class="tools">${canAddMateriel()?`<button class="btn sm" id="newMat">+ Matériel</button> `:""}${canAddIngredient()?`<button class="btn sm ghost" id="newIng">+ Ingrédient</button> `:""}${canAddMateriel()?`<button class="btn sm ghost" id="newBoisson">+ Boisson</button> `:""}${canAddMateriel()?`<button class="btn sm ghost" id="newCamion">+ Camion</button>`:""}${(!canAddMateriel()&&!canAddIngredient())?`<span class="ro-note">consultation seule</span>`:""}</div></div><div id="stockBox"><div class="state">Chargement…</div></div>`;
   if(canAddMateriel())$("newMat").addEventListener("click",openNewMateriel);
   if(canAddIngredient())$("newIng").addEventListener("click",openNewIngredient);
   if(canAddMateriel())$("newBoisson").addEventListener("click",openNewBoisson);
+  if(canAddMateriel())$("newCamion").addEventListener("click",openNewCamion);
   try{
     const inv=await api("/api/inventaire");const a=inv.filter(x=>x.en_alerte).length;
     let usageMap={};try{const us=await api("/api/materiels-usage");us.forEach(u=>{usageMap[u.id]=u.usage_type;});}catch(_){}
     let sortiMap={};try{const ss=await api("/api/materiels-sorties");ss.forEach(s=>{sortiMap[s.materiel_id]=Number(s.sorti)||0;});}catch(_){}
+    let transMap={};try{const tt=await api("/api/materiels-transport");tt.forEach(t=>{transMap[t.id]={h:t.necessite_hayon,f:t.necessite_frigo};});}catch(_){}
     const usageChip=u=>{const lbl={normal:"Normal",jetable:"Jetable",les_deux:"Les deux"}[u||"les_deux"]||"Les deux";return `<span class="pill" style="background:var(--paper);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:600">${lbl}</span>`;};
+    const transChip=id=>{const t=transMap[id]||{};return `${t.h?` <span class="pill" title="Nécessite un hayon">🛗 hayon</span>`:""}${t.f?` <span class="pill" title="Nécessite un transport réfrigéré">❄️ frigo</span>`:""}`;};
     const dispoCell=x=>{const sorti=sortiMap[x.materiel_id]||0;const dispo=Number(x.quantite_stock||0)-sorti;return `<span style="font-weight:700${dispo<0?";color:var(--court)":""}">${fmtN(dispo)}</span>${sorti>0?`<span class="ro-note" style="display:block;font-size:11px">${fmtN(sorti)} sur site</span>`:""}`;};
     const banner=a?`<div class="legend2"><span><span class="pip" style="background:var(--court)"></span> ${a} article${a>1?"s":""} sous le seuil</span></div>`:`<div class="legend2"><span><span class="pip" style="background:var(--ok)"></span> Tout le matériel est au-dessus de son seuil</span></div>`;
-    const rows=inv.map(x=>`<tr class="${x.en_alerte?"alert":""}"><td>${esc(x.nom)}</td><td class="num">${fmtN(x.quantite_stock)} ${esc(x.unite||"")}</td><td class="num">${dispoCell(x)}</td><td class="num">${fmtN(x.seuil_alerte)}</td><td>${x.en_alerte?`<span class="pill pill-alert">à réapprovisionner</span>`:`<span class="status s-ok"><span class="pip"></span>OK</span>`}</td><td>${usageChip(usageMap[x.materiel_id])}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-edit="${x.materiel_id}" data-nom="${esc(x.nom)}" data-stock="${esc(x.quantite_stock)}" data-seuil="${esc(x.seuil_alerte)}" data-usage="${esc(usageMap[x.materiel_id]||"les_deux")}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?7:6}">Aucun matériel</td></tr>`;
+    const rows=inv.map(x=>`<tr class="${x.en_alerte?"alert":""}"><td>${esc(x.nom)}</td><td class="num">${fmtN(x.quantite_stock)} ${esc(x.unite||"")}</td><td class="num">${dispoCell(x)}</td><td class="num">${fmtN(x.seuil_alerte)}</td><td>${x.en_alerte?`<span class="pill pill-alert">à réapprovisionner</span>`:`<span class="status s-ok"><span class="pip"></span>OK</span>`}</td><td>${usageChip(usageMap[x.materiel_id])}${transChip(x.materiel_id)}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-edit="${x.materiel_id}" data-nom="${esc(x.nom)}" data-stock="${esc(x.quantite_stock)}" data-seuil="${esc(x.seuil_alerte)}" data-usage="${esc(usageMap[x.materiel_id]||"les_deux")}" data-hayon="${transMap[x.materiel_id]&&transMap[x.materiel_id].h?1:0}" data-frigo="${transMap[x.materiel_id]&&transMap[x.materiel_id].f?1:0}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?7:6}">Aucun matériel</td></tr>`;
     $("stockBox").innerHTML=banner+`<table class="grid"><thead><tr><th>Matériel</th><th class="num">En stock</th><th class="num">Disponible</th><th class="num">Seuil</th><th>État</th><th>Usage</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${rows}</tbody></table>`;
     if(canAddMateriel())$("stockBox").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>editStock(b.dataset)));
     try{
@@ -846,6 +890,13 @@ async function renderStock(){
       const brows=bs.map(b=>`<tr><td>${esc(b.nom)}</td><td class="num">${fmtN(b.stock)} ${esc(b.unite||"")}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-bedit="${b.id}" data-bnom="${esc(b.nom)}" data-bstock="${esc(b.stock)}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?3:2}">Aucune boisson</td></tr>`;
       $("stockBox").insertAdjacentHTML("beforeend",`<h3 style="margin:24px 0 8px">Boissons</h3><table class="grid"><thead><tr><th>Boisson</th><th class="num">En stock</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${brows}</tbody></table>`);
       if(canAddMateriel())$("stockBox").querySelectorAll("[data-bedit]").forEach(b=>b.addEventListener("click",()=>editBoissonStock(b.dataset)));
+    }catch(_){}
+    try{
+      const cams=await api("/api/camions");
+      const oui=`<span class="pill" style="background:var(--paper);border:1px solid var(--line)">oui</span>`,non=`<span class="ro-note">—</span>`;
+      const crows=cams.map(c=>`<tr><td>${esc(c.nom)}</td><td>${c.hayon?oui:non}</td><td>${c.frigo?oui:non}</td><td>${c.capacite?esc(c.capacite):"—"}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-cedit="${c.id}" data-cnom="${esc(c.nom)}" data-chayon="${c.hayon?1:0}" data-cfrigo="${c.frigo?1:0}" data-ccap="${esc(c.capacite||"")}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?5:4}">Aucun camion</td></tr>`;
+      $("stockBox").insertAdjacentHTML("beforeend",`<h3 style="margin:24px 0 8px">Camions</h3><table class="grid"><thead><tr><th>Camion</th><th>Hayon</th><th>Frigo</th><th>Capacité</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${crows}</tbody></table>`);
+      if(canAddMateriel())$("stockBox").querySelectorAll("[data-cedit]").forEach(b=>b.addEventListener("click",()=>editCamion(b.dataset)));
     }catch(_){}
   }catch(e){$("stockBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
 }
@@ -855,19 +906,49 @@ function editStock(d){
       <div class="field"><label>Quantité en stock</label><input id="esStock" type="number" min="0" step="any" value="${esc(d.stock)}"></div>
       <div class="field"><label>Seuil d'alerte</label><input id="esSeuil" type="number" min="0" step="any" value="${esc(d.seuil)}"></div>
       <div class="field"><label>Usage selon le type de prestation</label><select id="esUsage"><option value="les_deux"${(!d.usage||d.usage==="les_deux")?" selected":""}>Les deux — compté dans tous les cas</option><option value="normal"${d.usage==="normal"?" selected":""}>Normal — buffet uniquement</option><option value="jetable"${d.usage==="jetable"?" selected":""}>Jetable — livré uniquement</option></select></div>
+      <div class="field"><label>Transport</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="esHayon"${d.hayon==="1"?" checked":""}><span>🛗 Nécessite un hayon (article lourd)</span></label><label class="check"><input type="checkbox" id="esFrigo"${d.frigo==="1"?" checked":""}><span>❄️ Nécessite un transport réfrigéré</span></label></div>
       <button class="btn full" id="esSave"><span class="spin"></span><span class="label">Enregistrer</span></button>
       <div class="msg err" id="esMsg"></div></div>`);
   $("esSave").addEventListener("click",async()=>{
     const m=$("esMsg");m.classList.remove("show");const quantite_stock=Number($("esStock").value),seuil_alerte=Number($("esSeuil").value);
     if(!(quantite_stock>=0)||!(seuil_alerte>=0)){m.textContent="Valeurs invalides.";m.classList.add("show");return;}
     const usage_type=$("esUsage")?$("esUsage").value:null;
+    const necessite_hayon=$("esHayon")?$("esHayon").checked:false,necessite_frigo=$("esFrigo")?$("esFrigo").checked:false;
     const btn=$("esSave");btn.classList.add("loading");btn.disabled=true;
     try{await api(`/api/materiels/${d.edit}/inventaire`,{method:"PUT",body:{quantite_stock,seuil_alerte}});
         if(usage_type){try{await api(`/api/materiels/${d.edit}/usage`,{method:"PUT",body:{usage_type}});}catch(_){}}
+        try{await api(`/api/materiels/${d.edit}/transport`,{method:"PUT",body:{necessite_hayon,necessite_frigo}});}catch(_){}
         closeModal();toast("Matériel mis à jour.");renderStock();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }
+
+/* ---------- CAMIONS (flotte) ---------- */
+function camionModal(d){
+  const edit=d&&d.cedit;
+  openModal(`<div class="modal-head"><div><h3>${edit?esc(d.cnom):"Nouveau camion"}</h3><div class="meta">Flotte de transport</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom / immatriculation</label><input id="caNom" placeholder="ex. Renault Master — AB-123-CD" value="${edit?esc(d.cnom):""}"></div>
+      <div class="field"><label>Capacité (indicatif)</label><input id="caCap" placeholder="ex. 12 m³ ou 40 bacs" value="${edit?esc(d.ccap||""):""}"></div>
+      <div class="field"><label>Équipements</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="caHayon"${edit&&d.chayon==="1"?" checked":""}><span>🛗 Hayon</span></label><label class="check"><input type="checkbox" id="caFrigo"${edit&&d.cfrigo==="1"?" checked":""}><span>❄️ Frigo</span></label></div>
+      <button class="btn full" id="caSave"><span class="spin"></span><span class="label">${edit?"Enregistrer":"Créer le camion"}</span></button>
+      ${edit?`<button class="btn danger sm full" id="caDel" style="margin-top:8px">Supprimer ce camion</button>`:""}
+      <div class="msg err" id="caMsg"></div></div>`);
+  $("caSave").addEventListener("click",async()=>{
+    const m=$("caMsg");m.classList.remove("show");
+    const nom=$("caNom").value.trim();if(!nom){m.textContent="Nom requis.";m.classList.add("show");return;}
+    const body={nom,hayon:$("caHayon").checked,frigo:$("caFrigo").checked,capacite:$("caCap").value.trim()};
+    const btn=$("caSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(edit?`/api/camions/${d.cedit}`:"/api/camions",{method:edit?"PUT":"POST",body});closeModal();toast(edit?"Camion mis à jour.":"Camion créé.");renderStock();}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+  if(edit&&$("caDel"))$("caDel").addEventListener("click",async()=>{
+    if(!confirm("Supprimer ce camion ?"))return;
+    try{await api(`/api/camions/${d.cedit}`,{method:"DELETE"});closeModal();toast("Camion supprimé.");renderStock();}catch(e){toast(e.message,true);}
+  });
+}
+function openNewCamion(){camionModal(null);}
+function editCamion(d){camionModal(d);}
 
 /* ---------- BOISSONS (catalogue) ---------- */
 function openNewBoisson(){
@@ -1054,6 +1135,7 @@ async function openPrep(id){
     try{c.materiel_extra=await api(`/api/commandes/${id}/materiels-extra`);}catch(_){c.materiel_extra=[];}
     try{c.materiel_sortie=await api(`/api/commandes/${id}/materiel-sortie`);}catch(_){c.materiel_sortie=[];}
     try{c.materiel_location=await api(`/api/commandes/${id}/materiel-location`);}catch(_){c.materiel_location=[];}
+    try{c.transport=await api(`/api/commandes/${id}/transport`);}catch(_){c.transport=null;}
     if(!prepDone[id])prepDone[id]=new Set();
     const louMapP={};(c.materiel_location||[]).forEach(l=>{louMapP[l.materiel_id]=num(l.quantite)||0;});
     const renderItem=(it)=>{const done=prepDone[id].has(it.key);
@@ -1081,6 +1163,7 @@ async function openPrep(id){
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn sm ghost" id="prepBoissons">Modifier les boissons</button>${(c.boissons_lignes||[]).length?`<button class="btn sm ghost" id="prepRetour">Retour J+1…</button>`:""}</div>
         ${materielLocationBox(c)}
         ${materielSortieBox(c)}
+        ${transportBox(c)}
         <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prepPrint">🖨 Imprimer la feuille</button></div>
       </div>`;
     $("prepRec").innerHTML=recItems.map(renderItem).join("")||`<div class="state" style="padding:8px 0">Aucune recette.</div>`;
@@ -1089,6 +1172,7 @@ async function openPrep(id){
     if($("prepBoissons"))$("prepBoissons").addEventListener("click",()=>openBoissonsEditor(c,()=>openPrep(id)));
     if($("prepMatExtra"))$("prepMatExtra").addEventListener("click",()=>openMaterielExtraEditor(c,()=>openPrep(id)));
     if($("btnLocation"))$("btnLocation").addEventListener("click",()=>openLocationEditor(c,()=>openPrep(id)));
+    if($("btnTransport"))$("btnTransport").addEventListener("click",()=>openTransportEditor(c,()=>openPrep(id)));
     if($("prepRetour"))$("prepRetour").addEventListener("click",()=>openRetour(c,()=>openPrep(id)));
     wireSortie(c,()=>openPrep(id));
     function refresh(){const dn=prepDone[id].size;$("prepBar").style.width=(total?Math.round(dn/total*100):0)+"%";$("prepPct").textContent=total?(dn===total?"✓ Tout est prêt":`${dn} / ${total} préparés`):"";}
