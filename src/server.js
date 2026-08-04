@@ -68,6 +68,14 @@ const { pool: _migPool } = require('./db');
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_frigo BOOLEAN DEFAULT false",
       "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS camion_id INTEGER REFERENCES camions(id) ON DELETE SET NULL",
       "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS transport_refrigere BOOLEAN DEFAULT false",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS modifie_le TIMESTAMPTZ DEFAULT now()",
+      "CREATE OR REPLACE FUNCTION touch_commande_modifie() RETURNS trigger AS $$ BEGIN NEW.modifie_le = now(); RETURN NEW; END; $$ LANGUAGE plpgsql",
+      "DROP TRIGGER IF EXISTS trg_commande_modifie ON commandes",
+      "CREATE TRIGGER trg_commande_modifie BEFORE UPDATE ON commandes FOR EACH ROW EXECUTE FUNCTION touch_commande_modifie()",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS heure_depart_marchandise TEXT",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS heure_depart_cuisinier TEXT",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS heure_arrivee_serveurs TEXT",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS heure_retour TEXT",
   ]) {
     try { await _migPool.query(sql); }
     catch (e) { console.error('Migration colonne:', e.message); }

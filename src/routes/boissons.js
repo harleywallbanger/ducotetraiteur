@@ -394,4 +394,27 @@ router.get('/commandes/:id/transport', ah(async (req, res) => {
   });
 }));
 
+// Horaires d'une commande (départ marchandise/cuisinier, arrivée serveurs, retour)
+router.put('/commandes/:id/horaires', requireMaterielEditor, ah(async (req, res) => {
+  const b = req.body || {};
+  const clean = (v) => (v != null && String(v).trim() !== '') ? String(v).trim() : null;
+  const { rows } = await pool.query(
+    `UPDATE commandes SET
+        heure_depart_marchandise = $1,
+        heure_depart_cuisinier   = $2,
+        heure_arrivee_serveurs   = $3,
+        heure_retour             = $4
+      WHERE id = $5 RETURNING id`,
+    [clean(b.heure_depart_marchandise), clean(b.heure_depart_cuisinier), clean(b.heure_arrivee_serveurs), clean(b.heure_retour), req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable' });
+  res.json({ ok: true });
+}));
+
+// Commandes récentes/à venir avec date de dernière modification (pour la notification d'ouverture)
+router.get('/commandes-modifs', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT id, client, date_event, modifie_le FROM commandes WHERE date_event >= (CURRENT_DATE - INTERVAL '2 days') ORDER BY modifie_le DESC NULLS LAST LIMIT 60");
+  res.json(rows);
+}));
+
 module.exports = router;
