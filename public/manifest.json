@@ -1,0 +1,16 @@
+{
+  "name": "Du Côté Traiteur",
+  "short_name": "DC Traiteur",
+  "description": "Espace de gestion — recettes, matériel, inventaire et commandes.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ECE6DA",
+  "theme_color": "#1E3D30",
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
