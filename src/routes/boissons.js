@@ -267,4 +267,41 @@ router.get('/materiels-sorties', ah(async (req, res) => {
   res.json(rows);
 }));
 
+/* ---- Location matériel : « à louer » pour couvrir le manque ---- */
+
+// Locations d'une commande
+router.get('/commandes/:id/materiel-location', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT l.materiel_id, m.nom AS materiel, m.unite, l.quantite, l.fournisseur
+       FROM commande_materiel_location l
+       JOIN materiels m ON m.id = l.materiel_id
+      WHERE l.commande_id = $1
+      ORDER BY m.nom`, [req.params.id]);
+  res.json(rows);
+}));
+
+// Remplacer les locations d'une commande
+router.put('/commandes/:id/materiel-location', requireMaterielEditor, ah(async (req, res) => {
+  const id = req.params.id;
+  const arr = Array.isArray(req.body && req.body.locations) ? req.body.locations : [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM commande_materiel_location WHERE commande_id = $1', [id]);
+    for (const l of arr) {
+      const mid = Number(l.materiel_id);
+      const q = Number(l.quantite) || 0;
+      if (!mid || q <= 0) continue;
+      const four = (l.fournisseur != null && String(l.fournisseur).trim() !== '') ? String(l.fournisseur).trim() : null;
+      await client.query(
+        `INSERT INTO commande_materiel_location (commande_id, materiel_id, quantite, fournisseur)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (commande_id, materiel_id) DO UPDATE SET quantite = EXCLUDED.quantite, fournisseur = EXCLUDED.fournisseur`,
+        [id, mid, q, four]);
+    }
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  res.json({ ok: true });
+}));
+
 module.exports = router;
