@@ -308,7 +308,7 @@ router.put('/commandes/:id/materiel-location', requireMaterielEditor, ah(async (
 
 // Catalogue camions
 router.get('/camions', ah(async (req, res) => {
-  const { rows } = await pool.query('SELECT id, nom, hayon, frigo, capacite FROM camions ORDER BY nom');
+  const { rows } = await pool.query('SELECT id, nom, immatriculation, hayon, frigo, capacite FROM camions ORDER BY nom');
   res.json(rows);
 }));
 router.post('/camions', requireMaterielEditor, ah(async (req, res) => {
@@ -317,9 +317,10 @@ router.post('/camions', requireMaterielEditor, ah(async (req, res) => {
   const hayon = !!(req.body && req.body.hayon);
   const frigo = !!(req.body && req.body.frigo);
   const capacite = (req.body && req.body.capacite != null && String(req.body.capacite).trim() !== '') ? String(req.body.capacite).trim() : null;
+  const immatriculation = (req.body && req.body.immatriculation != null && String(req.body.immatriculation).trim() !== '') ? String(req.body.immatriculation).trim() : null;
   const { rows } = await pool.query(
-    'INSERT INTO camions (nom, hayon, frigo, capacite) VALUES ($1,$2,$3,$4) RETURNING id, nom, hayon, frigo, capacite',
-    [nom, hayon, frigo, capacite]);
+    'INSERT INTO camions (nom, immatriculation, hayon, frigo, capacite) VALUES ($1,$2,$3,$4,$5) RETURNING id, nom, immatriculation, hayon, frigo, capacite',
+    [nom, immatriculation, hayon, frigo, capacite]);
   res.status(201).json(rows[0]);
 }));
 router.put('/camions/:id', requireMaterielEditor, ah(async (req, res) => {
@@ -328,9 +329,10 @@ router.put('/camions/:id', requireMaterielEditor, ah(async (req, res) => {
   const hayon = !!(req.body && req.body.hayon);
   const frigo = !!(req.body && req.body.frigo);
   const capacite = (req.body && req.body.capacite != null && String(req.body.capacite).trim() !== '') ? String(req.body.capacite).trim() : null;
+  const immatriculation = (req.body && req.body.immatriculation != null && String(req.body.immatriculation).trim() !== '') ? String(req.body.immatriculation).trim() : null;
   const { rows } = await pool.query(
-    'UPDATE camions SET nom=$1, hayon=$2, frigo=$3, capacite=$4 WHERE id=$5 RETURNING id, nom, hayon, frigo, capacite',
-    [nom, hayon, frigo, capacite, req.params.id]);
+    'UPDATE camions SET nom=$1, immatriculation=$2, hayon=$3, frigo=$4, capacite=$5 WHERE id=$6 RETURNING id, nom, immatriculation, hayon, frigo, capacite',
+    [nom, immatriculation, hayon, frigo, capacite, req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Camion introuvable' });
   res.json(rows[0]);
 }));

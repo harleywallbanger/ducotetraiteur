@@ -955,8 +955,8 @@ async function renderStock(){
     try{
       const cams=await api("/api/camions");
       const oui=`<span class="pill" style="background:var(--paper);border:1px solid var(--line)">oui</span>`,non=`<span class="ro-note">—</span>`;
-      const crows=cams.map(c=>`<tr><td>${esc(c.nom)}</td><td>${c.hayon?oui:non}</td><td>${c.frigo?oui:non}</td><td>${c.capacite?esc(c.capacite):"—"}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-cedit="${c.id}" data-cnom="${esc(c.nom)}" data-chayon="${c.hayon?1:0}" data-cfrigo="${c.frigo?1:0}" data-ccap="${esc(c.capacite||"")}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?5:4}">Aucun camion</td></tr>`;
-      $("stockBox").insertAdjacentHTML("beforeend",`<h3 style="margin:24px 0 8px">Camions</h3><table class="grid"><thead><tr><th>Camion</th><th>Hayon</th><th>Frigo</th><th>Capacité</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${crows}</tbody></table>`);
+      const crows=cams.map(c=>`<tr><td>${esc(c.nom)}</td><td>${c.immatriculation?esc(c.immatriculation):"—"}</td><td>${c.hayon?oui:non}</td><td>${c.frigo?oui:non}</td><td>${c.capacite?esc(c.capacite):"—"}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-cedit="${c.id}" data-cnom="${esc(c.nom)}" data-cimmat="${esc(c.immatriculation||"")}" data-chayon="${c.hayon?1:0}" data-cfrigo="${c.frigo?1:0}" data-ccap="${esc(c.capacite||"")}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?6:5}">Aucun camion</td></tr>`;
+      $("stockBox").insertAdjacentHTML("beforeend",`<h3 style="margin:24px 0 8px">Camions</h3><table class="grid"><thead><tr><th>Camion</th><th>Immatriculation</th><th>Hayon</th><th>Frigo</th><th>Capacité</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${crows}</tbody></table>`);
       if(canAddMateriel())$("stockBox").querySelectorAll("[data-cedit]").forEach(b=>b.addEventListener("click",()=>editCamion(b.dataset)));
     }catch(_){}
   }catch(e){$("stockBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
@@ -989,7 +989,8 @@ function camionModal(d){
   const edit=d&&d.cedit;
   openModal(`<div class="modal-head"><div><h3>${edit?esc(d.cnom):"Nouveau camion"}</h3><div class="meta">Flotte de transport</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="field"><label>Nom / immatriculation</label><input id="caNom" placeholder="ex. Renault Master — AB-123-CD" value="${edit?esc(d.cnom):""}"></div>
+      <div class="field"><label>Nom</label><input id="caNom" placeholder="ex. Renault Master" value="${edit?esc(d.cnom):""}"></div>
+      <div class="field"><label>Immatriculation</label><input id="caImmat" placeholder="ex. AB-123-CD" value="${edit?esc(d.cimmat||""):""}"></div>
       <div class="field"><label>Capacité (indicatif)</label><input id="caCap" placeholder="ex. 12 m³ ou 40 bacs" value="${edit?esc(d.ccap||""):""}"></div>
       <div class="field"><label>Équipements</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="caHayon"${edit&&d.chayon==="1"?" checked":""}><span>🛗 Hayon</span></label><label class="check"><input type="checkbox" id="caFrigo"${edit&&d.cfrigo==="1"?" checked":""}><span>❄️ Frigo</span></label></div>
       <button class="btn full" id="caSave"><span class="spin"></span><span class="label">${edit?"Enregistrer":"Créer le camion"}</span></button>
@@ -998,7 +999,7 @@ function camionModal(d){
   $("caSave").addEventListener("click",async()=>{
     const m=$("caMsg");m.classList.remove("show");
     const nom=$("caNom").value.trim();if(!nom){m.textContent="Nom requis.";m.classList.add("show");return;}
-    const body={nom,hayon:$("caHayon").checked,frigo:$("caFrigo").checked,capacite:$("caCap").value.trim()};
+    const body={nom,immatriculation:$("caImmat").value.trim(),hayon:$("caHayon").checked,frigo:$("caFrigo").checked,capacite:$("caCap").value.trim()};
     const btn=$("caSave");btn.classList.add("loading");btn.disabled=true;
     try{await api(edit?`/api/camions/${d.cedit}`:"/api/camions",{method:edit?"PUT":"POST",body});closeModal();toast(edit?"Camion mis à jour.":"Camion créé.");renderStock();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
