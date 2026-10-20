@@ -962,6 +962,14 @@ async function renderStock(){
     }catch(_){}
   }catch(e){$("stockBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
 }
+/* ---- Photos : redimensionnement client + widget ---- */
+function resizePhoto(file){return new Promise((res,rej)=>{if(!file||!file.type||file.type.indexOf("image/")!==0){rej(new Error("non image"));return;}const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{let w=img.width,h=img.height;const max=640;if(w>h&&w>max){h=Math.round(h*max/w);w=max;}else if(h>=w&&h>max){w=Math.round(w*max/h);h=max;}const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);try{res(c.toDataURL("image/jpeg",0.72));}catch(e){rej(e);}};img.onerror=rej;img.src=r.result;};r.onerror=rej;r.readAsDataURL(file);});}
+function mountPhoto(boxId, baseUrl){
+  const box=$(boxId);let current="",pending=null;
+  function render(){if(!box)return;const src=pending!==null?pending:current;box.innerHTML=`<div style="display:flex;align-items:center;gap:14px">${src?`<img src="${src}" style="width:88px;height:88px;object-fit:cover;border-radius:12px;border:1px solid var(--line)">`:`<div style="width:88px;height:88px;border-radius:12px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px">aucune</div>`}<div style="display:flex;flex-direction:column;gap:6px"><label class="btn ghost sm" style="cursor:pointer;margin:0">Choisir une photo<input type="file" accept="image/*" style="display:none"></label>${src?`<button type="button" class="btn ghost sm" data-rm>Retirer</button>`:""}</div></div>`;const inp=box.querySelector('input[type=file]');if(inp)inp.onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{pending=await resizePhoto(f);render();}catch(_){toast("Image illisible.",true);}};const rm=box.querySelector("[data-rm]");if(rm)rm.onclick=()=>{pending="";render();};}
+  render();api(baseUrl).then(d=>{current=(d&&d.photo)||"";render();}).catch(()=>{});
+  return function commit(){if(pending===null)return Promise.resolve();return api(baseUrl,{method:"PUT",body:{photo:pending||null}});};
+}
 function editStock(d){
   openModal(`<div class="modal-head"><div><h3>${esc(d.nom)}</h3><div class="meta">Stock, seuil et usage</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
@@ -970,8 +978,10 @@ function editStock(d){
       <div class="field"><label>Seuil d'alerte</label><input id="esSeuil" type="number" min="0" step="any" value="${esc(d.seuil)}"></div>
       <div class="field"><label>Usage selon le type de prestation</label><select id="esUsage"><option value="les_deux"${(!d.usage||d.usage==="les_deux")?" selected":""}>Les deux — compté dans tous les cas</option><option value="normal"${d.usage==="normal"?" selected":""}>Normal — buffet uniquement</option><option value="jetable"${d.usage==="jetable"?" selected":""}>Jetable — livré uniquement</option></select></div>
       <div class="field"><label>Transport</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="esHayon"${d.hayon==="1"?" checked":""}><span>🛗 Nécessite un hayon (article lourd)</span></label><label class="check"><input type="checkbox" id="esFrigo"${d.frigo==="1"?" checked":""}><span>❄️ Nécessite un transport réfrigéré</span></label></div>
+      <div class="field"><label>Photo</label><div id="esPhoto"></div></div>
       <button class="btn full" id="esSave"><span class="spin"></span><span class="label">Enregistrer</span></button>
       <div class="msg err" id="esMsg"></div></div>`);
+  const esPhotoCommit=mountPhoto("esPhoto",`/api/materiels/${d.edit}/photo`);
   $("esSave").addEventListener("click",async()=>{
     const m=$("esMsg");m.classList.remove("show");const quantite_stock=Number($("esStock").value),seuil_alerte=Number($("esSeuil").value);
     if(!(quantite_stock>=0)||!(seuil_alerte>=0)){m.textContent="Valeurs invalides.";m.classList.add("show");return;}
@@ -982,6 +992,7 @@ function editStock(d){
         if(usage_type){try{await api(`/api/materiels/${d.edit}/usage`,{method:"PUT",body:{usage_type}});}catch(_){}}
         try{await api(`/api/materiels/${d.edit}/transport`,{method:"PUT",body:{necessite_hayon,necessite_frigo}});}catch(_){}
         try{await api(`/api/materiels/${d.edit}/numero`,{method:"PUT",body:{numero:($("esNum")?$("esNum").value.trim():"")}});}catch(_){}
+        try{await esPhotoCommit();}catch(_){}
         closeModal();toast("Matériel mis à jour.");renderStock();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
@@ -996,15 +1007,17 @@ function camionModal(d){
       <div class="field"><label>Immatriculation</label><input id="caImmat" placeholder="ex. AB-123-CD" value="${edit?esc(d.cimmat||""):""}"></div>
       <div class="field"><label>Capacité (indicatif)</label><input id="caCap" placeholder="ex. 12 m³ ou 40 bacs" value="${edit?esc(d.ccap||""):""}"></div>
       <div class="field"><label>Équipements</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="caHayon"${edit&&d.chayon==="1"?" checked":""}><span>🛗 Hayon</span></label><label class="check"><input type="checkbox" id="caFrigo"${edit&&d.cfrigo==="1"?" checked":""}><span>❄️ Frigo</span></label></div>
+      ${edit?`<div class="field"><label>Photo</label><div id="caPhoto"></div></div>`:""}
       <button class="btn full" id="caSave"><span class="spin"></span><span class="label">${edit?"Enregistrer":"Créer le camion"}</span></button>
       ${edit?`<button class="btn danger sm full" id="caDel" style="margin-top:8px">Supprimer ce camion</button>`:""}
       <div class="msg err" id="caMsg"></div></div>`);
+  const caPhotoCommit=edit?mountPhoto("caPhoto",`/api/camions/${d.cedit}/photo`):null;
   $("caSave").addEventListener("click",async()=>{
     const m=$("caMsg");m.classList.remove("show");
     const nom=$("caNom").value.trim();if(!nom){m.textContent="Nom requis.";m.classList.add("show");return;}
     const body={nom,immatriculation:$("caImmat").value.trim(),hayon:$("caHayon").checked,frigo:$("caFrigo").checked,capacite:$("caCap").value.trim()};
     const btn=$("caSave");btn.classList.add("loading");btn.disabled=true;
-    try{await api(edit?`/api/camions/${d.cedit}`:"/api/camions",{method:edit?"PUT":"POST",body});closeModal();toast(edit?"Camion mis à jour.":"Camion créé.");renderStock();}
+    try{await api(edit?`/api/camions/${d.cedit}`:"/api/camions",{method:edit?"PUT":"POST",body});if(caPhotoCommit){try{await caPhotoCommit();}catch(_){}}closeModal();toast(edit?"Camion mis à jour.":"Camion créé.");renderStock();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
   if(edit&&$("caDel"))$("caDel").addEventListener("click",async()=>{
@@ -1037,13 +1050,15 @@ function editBoissonStock(d){
   openModal(`<div class="modal-head"><div><h3>${esc(d.bnom)}</h3><div class="meta">Stock boisson</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="field"><label>Quantité en stock</label><input id="ebStock" type="number" min="0" step="any" value="${esc(d.bstock)}"></div>
+      <div class="field"><label>Photo</label><div id="ebPhoto"></div></div>
       <button class="btn full" id="ebSave"><span class="spin"></span><span class="label">Enregistrer</span></button>
       <div class="msg err" id="ebMsg"></div></div>`);
+  const ebPhotoCommit=mountPhoto("ebPhoto",`/api/boissons/${d.bedit}/photo`);
   $("ebSave").addEventListener("click",async()=>{
     const m=$("ebMsg");m.classList.remove("show");const stock=Number($("ebStock").value);
     if(!(stock>=0)){m.textContent="Valeur invalide.";m.classList.add("show");return;}
     const btn=$("ebSave");btn.classList.add("loading");btn.disabled=true;
-    try{await api(`/api/boissons/${d.bedit}/stock`,{method:"PUT",body:{stock}});closeModal();toast("Stock boisson mis à jour.");renderStock();}
+    try{await api(`/api/boissons/${d.bedit}/stock`,{method:"PUT",body:{stock}});try{await ebPhotoCommit();}catch(_){}closeModal();toast("Stock boisson mis à jour.");renderStock();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }

@@ -433,4 +433,27 @@ router.put('/materiels/:id/numero', requireMaterielEditor, ah(async (req, res) =
   res.json(rows[0]);
 }));
 
+/* ---- Photos (stockées en base, data URL) : matériel, boisson, camion ---- */
+const TABLES_PHOTO = { materiels: 'materiels', boissons: 'boissons', camions: 'camions' };
+const MAX_PHOTO = 3 * 1024 * 1024; // ~3 Mo de base64
+
+function routePhoto(seg, table) {
+  router.get(`/${seg}/:id/photo`, ah(async (req, res) => {
+    const { rows } = await pool.query(`SELECT photo FROM ${table} WHERE id=$1`, [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Introuvable' });
+    res.json({ photo: rows[0].photo || null });
+  }));
+  router.put(`/${seg}/:id/photo`, requireMaterielEditor, ah(async (req, res) => {
+    let photo = (req.body && req.body.photo != null && String(req.body.photo).trim() !== '') ? String(req.body.photo).trim() : null;
+    if (photo && !/^data:image\/(png|jpeg|jpg|webp);base64,/.test(photo))
+      return res.status(400).json({ error: 'Format image invalide' });
+    if (photo && photo.length > MAX_PHOTO)
+      return res.status(413).json({ error: 'Image trop lourde' });
+    const { rows } = await pool.query(`UPDATE ${table} SET photo=$1 WHERE id=$2 RETURNING id`, [photo, req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Introuvable' });
+    res.json({ ok: true });
+  }));
+}
+for (const [seg, table] of Object.entries(TABLES_PHOTO)) routePhoto(seg, table);
+
 module.exports = router;
