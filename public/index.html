@@ -239,6 +239,7 @@ const FONCTIONS=[["maitre_hotel","Maître d'hôtel"],["serveur","Serveur"],["che
 const FONCTION_LABEL=Object.fromEntries(FONCTIONS);
 const TABS=[
   {id:"commandes",label:"Commandes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
+  {id:"calendrier",label:"Calendrier",roles:["admin","manager","chef","cuisinier","preparateur","maitre_hotel","serveur"]},
   {id:"clients",label:"Clients",roles:["admin","manager","maitre_hotel","serveur"]},
   {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
   {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
@@ -341,7 +342,38 @@ function renderNotifBar(changed){
 $("tabs").addEventListener("click",(e)=>{const b=e.target.closest("button[data-view]");if(b)switchView(b.dataset.view);});
 function switchView(view){
   [...$("tabs").children].forEach(b=>b.classList.toggle("active",b.dataset.view===view));
-  ({commandes:renderCommandes,clients:renderClients,stock:renderStock,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+  ({commandes:renderCommandes,calendrier:renderCalendrier,clients:renderClients,stock:renderStock,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+}
+
+/* ---------- CALENDRIER ---------- */
+let calCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+async function renderCalendrier(){
+  const y=calCursor.getFullYear(),m=calCursor.getMonth(),p=x=>String(x).padStart(2,"0");
+  const from=`${y}-${p(m+1)}-01`,to=`${y}-${p(m+1)}-${p(new Date(y,m+1,0).getDate())}`;
+  $("content").innerHTML=`<div class="head"><h2>Calendrier</h2><div class="tools">
+      <button class="btn sm ghost" id="calPrev">←</button>
+      <span class="filter" style="min-width:160px;text-align:center;text-transform:capitalize">${MOIS_LONG[m]} ${y}</span>
+      <button class="btn sm ghost" id="calNext">→</button>
+      <button class="btn sm ghost" id="calToday">Aujourd'hui</button>
+    </div></div><div id="calBox"><div class="state">Chargement…</div></div>`;
+  $("calPrev").addEventListener("click",()=>{calCursor=new Date(y,m-1,1);renderCalendrier();});
+  $("calNext").addEventListener("click",()=>{calCursor=new Date(y,m+1,1);renderCalendrier();});
+  $("calToday").addEventListener("click",()=>{const n=new Date();calCursor=new Date(n.getFullYear(),n.getMonth(),1);renderCalendrier();});
+  let list=[];try{list=await api(`/api/commandes?from=${from}&to=${to}`);}catch(e){$("calBox").innerHTML=`<div class="state">${esc(e.message)}</div>`;return;}
+  const byDay={};list.forEach(c=>{const d=String(c.date_event).slice(0,10);(byDay[d]=byDay[d]||[]).push(c);});
+  const lead=(new Date(y,m,1).getDay()+6)%7,ndays=new Date(y,m+1,0).getDate();
+  const n=new Date(),todayStr=`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`;
+  const dow=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  const cellBase="min-height:96px;border:1px solid var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:3px;overflow:hidden";
+  let cells="";
+  for(let i=0;i<lead;i++)cells+=`<div></div>`;
+  for(let day=1;day<=ndays;day++){
+    const ds=`${y}-${p(m+1)}-${p(day)}`,evs=byDay[ds]||[],isToday=ds===todayStr;
+    const items=evs.map(c=>{const cv=c.total_couverts||c.couverts;return `<button class="cal-ev" data-cid="${c.id}" title="${esc(c.client||"Sans client")}${cv?` · ${cv} couverts`:""}" style="text-align:left;border:1px solid var(--line);background:rgba(31,122,90,.08);border-radius:7px;padding:3px 6px;font-size:11.5px;line-height:1.25;cursor:pointer;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.client||"Sans client")}${cv?` · ${cv}c`:""}</button>`;}).join("");
+    cells+=`<div style="${cellBase}${isToday?";background:rgba(200,162,75,.12);border-color:#c8a24b":""}"><div style="font-size:12px;font-weight:700;color:${isToday?"#b4862f":"var(--ink-soft)"}">${day}</div>${items}</div>`;
+  }
+  $("calBox").innerHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px">${dow.map(d=>`<div style="text-align:center;font-size:12px;color:var(--ink-soft);font-weight:600">${d}</div>`).join("")}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:stretch">${cells}</div>${list.length?"":`<div class="state" style="margin-top:14px">Aucune commande ce mois-ci.</div>`}`;
+  $("calBox").querySelectorAll(".cal-ev").forEach(b=>b.addEventListener("click",()=>openCommande(b.dataset.cid)));
 }
 
 /* ---------- helpers ---------- */
@@ -986,8 +1018,8 @@ async function renderStock(){
     try{
       const cams=await api("/api/camions");
       const oui=`<span class="pill" style="background:var(--paper);border:1px solid var(--line)">oui</span>`,non=`<span class="ro-note">—</span>`;
-      const crows=cams.map(c=>`<tr><td>${esc(c.nom)}</td><td>${c.immatriculation?esc(c.immatriculation):"—"}</td><td>${c.hayon?oui:non}</td><td>${c.frigo?oui:non}</td><td>${c.capacite?esc(c.capacite):"—"}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-cedit="${c.id}" data-cnom="${esc(c.nom)}" data-cimmat="${esc(c.immatriculation||"")}" data-chayon="${c.hayon?1:0}" data-cfrigo="${c.frigo?1:0}" data-ccap="${esc(c.capacite||"")}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?6:5}">Aucun camion</td></tr>`;
-      $("stockBox").insertAdjacentHTML("beforeend",`<h3 style="margin:24px 0 8px">Camions</h3><table class="grid"><thead><tr><th>Camion</th><th>Immatriculation</th><th>Hayon</th><th>Frigo</th><th>Capacité</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${crows}</tbody></table>`);
+      const crows=cams.map(c=>`<tr><td>${esc(c.nom)}</td><td>${c.immatriculation?esc(c.immatriculation):"—"}</td><td>${c.hayon?oui:non}</td><td>${c.frigo?oui:non}</td><td>${c.capacite?esc(c.capacite):"—"}</td><td>${c.loue?`🔑 ${c.loueur?esc(c.loueur):"loué"}`:non}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-cedit="${c.id}" data-cnom="${esc(c.nom)}" data-cimmat="${esc(c.immatriculation||"")}" data-chayon="${c.hayon?1:0}" data-cfrigo="${c.frigo?1:0}" data-ccap="${esc(c.capacite||"")}" data-cloue="${c.loue?1:0}" data-cloueur="${esc(c.loueur||"")}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?7:6}">Aucun camion</td></tr>`;
+      $("stockBox").insertAdjacentHTML("beforeend",`<h3 style="margin:24px 0 8px">Camions</h3><table class="grid"><thead><tr><th>Camion</th><th>Immatriculation</th><th>Hayon</th><th>Frigo</th><th>Capacité</th><th>Loué</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${crows}</tbody></table>`);
       if(canAddMateriel())$("stockBox").querySelectorAll("[data-cedit]").forEach(b=>b.addEventListener("click",()=>editCamion(b.dataset)));
     }catch(_){}
   }catch(e){$("stockBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
@@ -1037,15 +1069,19 @@ function camionModal(d){
       <div class="field"><label>Immatriculation</label><input id="caImmat" placeholder="ex. AB-123-CD" value="${edit?esc(d.cimmat||""):""}"></div>
       <div class="field"><label>Capacité (indicatif)</label><input id="caCap" placeholder="ex. 12 m³ ou 40 bacs" value="${edit?esc(d.ccap||""):""}"></div>
       <div class="field"><label>Équipements</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="caHayon"${edit&&d.chayon==="1"?" checked":""}><span>🛗 Hayon</span></label><label class="check"><input type="checkbox" id="caFrigo"${edit&&d.cfrigo==="1"?" checked":""}><span>❄️ Frigo</span></label></div>
+      <div class="field"><label>Location</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="caLoue"${edit&&d.cloue==="1"?" checked":""}><span>🔑 Camion loué</span></label></div>
+      <div class="field" id="caLoueurWrap"${edit&&d.cloue==="1"?"":` style="display:none"`}><label>Loueur</label><input id="caLoueur" placeholder="ex. Hertz, loueur local…" value="${edit?esc(d.cloueur||""):""}"></div>
       ${edit?`<div class="field"><label>Photo</label><div id="caPhoto"></div></div>`:""}
       <button class="btn full" id="caSave"><span class="spin"></span><span class="label">${edit?"Enregistrer":"Créer le camion"}</span></button>
       ${edit?`<button class="btn danger sm full" id="caDel" style="margin-top:8px">Supprimer ce camion</button>`:""}
       <div class="msg err" id="caMsg"></div></div>`);
   const caPhotoCommit=edit?mountPhoto("caPhoto",`/api/camions/${d.cedit}/photo`):null;
+  $("caLoue").addEventListener("change",e=>{$("caLoueurWrap").style.display=e.target.checked?"":"none";});
   $("caSave").addEventListener("click",async()=>{
     const m=$("caMsg");m.classList.remove("show");
     const nom=$("caNom").value.trim();if(!nom){m.textContent="Nom requis.";m.classList.add("show");return;}
-    const body={nom,immatriculation:$("caImmat").value.trim(),hayon:$("caHayon").checked,frigo:$("caFrigo").checked,capacite:$("caCap").value.trim()};
+    const loue=$("caLoue").checked;
+    const body={nom,immatriculation:$("caImmat").value.trim(),hayon:$("caHayon").checked,frigo:$("caFrigo").checked,capacite:$("caCap").value.trim(),loue,loueur:loue?$("caLoueur").value.trim():null};
     const btn=$("caSave");btn.classList.add("loading");btn.disabled=true;
     try{await api(edit?`/api/camions/${d.cedit}`:"/api/camions",{method:edit?"PUT":"POST",body});if(caPhotoCommit){try{await caPhotoCommit();}catch(_){}}closeModal();toast(edit?"Camion mis à jour.":"Camion créé.");renderStock();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}

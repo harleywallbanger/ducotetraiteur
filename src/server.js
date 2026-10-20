@@ -76,6 +76,8 @@ const { pool: _migPool } = require('./db');
       "ALTER TYPE role_utilisateur ADD VALUE IF NOT EXISTS 'serveur'",
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS numero TEXT",
       "ALTER TABLE camions ADD COLUMN IF NOT EXISTS immatriculation TEXT",
+      "ALTER TABLE camions ADD COLUMN IF NOT EXISTS loue BOOLEAN DEFAULT false",
+      "ALTER TABLE camions ADD COLUMN IF NOT EXISTS loueur TEXT",
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_hayon BOOLEAN DEFAULT false",
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_frigo BOOLEAN DEFAULT false",
       "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS camion_id INTEGER REFERENCES camions(id) ON DELETE SET NULL",
