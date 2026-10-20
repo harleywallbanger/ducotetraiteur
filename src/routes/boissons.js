@@ -217,6 +217,13 @@ router.put('/materiels/:id/usage', requireMaterielEditor, ah(async (req, res) =>
   if (!rows.length) return res.status(404).json({ error: 'Matériel introuvable' });
   res.json(rows[0]);
 }));
+// "Reste sur place" : matériel durable (tables, gros matériel) chargé une fois pour tout l'événement
+router.put('/materiels/:id/permanent', requireMaterielEditor, ah(async (req, res) => {
+  const permanent = !!(req.body && req.body.permanent);
+  const { rows } = await pool.query('UPDATE materiels SET permanent = $1 WHERE id = $2 RETURNING id, permanent', [permanent, req.params.id]);
+  if (!rows.length) return res.status(404).json({ error: 'Matériel introuvable' });
+  res.json(rows[0]);
+}));
 
 /* ---- Matériel laissé sur place : sortie / récupération ---- */
 

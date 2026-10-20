@@ -35,7 +35,9 @@ router.get('/:id', ah(async (req, res) => {
       WHERE cr.commande_id = $1 ORDER BY r.nom`, [id]);
 
   const { rows: materiel } = await pool.query(
-    'SELECT * FROM besoins_materiel_effectif WHERE commande_id = $1 ORDER BY materiel', [id]);
+    `SELECT bme.*, COALESCE(m.permanent, false) AS permanent
+       FROM besoins_materiel_effectif bme JOIN materiels m ON m.id = bme.materiel_id
+      WHERE bme.commande_id = $1 ORDER BY bme.materiel`, [id]);
 
   const { rows: cuisine } = await pool.query(
     'SELECT * FROM besoins_ingredients_effectif WHERE commande_id = $1 ORDER BY ingredient', [id]);

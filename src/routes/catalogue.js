@@ -67,6 +67,7 @@ router.put('/materiels/:id/inventaire', requireMaterielEditor, ah(async (req, re
 router.get('/inventaire', ah(async (_req, res) => {
   const { rows } = await pool.query(
     `SELECT inv.materiel_id, m.nom, m.unite, inv.quantite_stock, inv.seuil_alerte,
+            COALESCE(m.permanent, false) AS permanent,
             (inv.quantite_stock < inv.seuil_alerte) AS en_alerte
        FROM inventaire inv
        JOIN materiels m ON m.id = inv.materiel_id
