@@ -574,4 +574,34 @@ router.get('/appros', ah(async (req, res) => {
   res.json({ from, to, boissons: boissons.map(enrich), linge: linge.map(enrich) });
 }));
 
+/* ---- Structure multi-jour : journées d'une commande (date, libellé, horaires, notes) ---- */
+router.get('/commandes/:id/jours', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, jour_index, jour_date, label, heure_depart_marchandise, heure_depart_cuisinier,
+            heure_arrivee_serveurs, heure_retour, notes
+       FROM commande_jours WHERE commande_id = $1 ORDER BY jour_index, jour_date`, [req.params.id]);
+  res.json(rows);
+}));
+router.put('/commandes/:id/jours', requireMaterielEditor, ah(async (req, res) => {
+  const jours = Array.isArray(req.body && req.body.jours) ? req.body.jours : [];
+  const t = v => (v != null && String(v).trim() !== '') ? String(v).trim() : null;
+  const cx = await pool.connect();
+  try {
+    await cx.query('BEGIN');
+    await cx.query('DELETE FROM commande_jours WHERE commande_id = $1', [req.params.id]);
+    let i = 0;
+    for (const j of jours) {
+      i++;
+      await cx.query(
+        `INSERT INTO commande_jours (commande_id, jour_index, jour_date, label,
+            heure_depart_marchandise, heure_depart_cuisinier, heure_arrivee_serveurs, heure_retour, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [req.params.id, Number(j.jour_index) || i, t(j.jour_date), t(j.label),
+         t(j.heure_depart_marchandise), t(j.heure_depart_cuisinier), t(j.heure_arrivee_serveurs), t(j.heure_retour), t(j.notes)]);
+    }
+    await cx.query('COMMIT');
+  } catch (e) { await cx.query('ROLLBACK'); throw e; } finally { cx.release(); }
+  res.json({ ok: true });
+}));
+
 module.exports = router;

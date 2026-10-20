@@ -541,6 +541,7 @@ async function openCommande(id){
     try{c.materiel_location=await api(`/api/commandes/${id}/materiel-location`);}catch(_){c.materiel_location=[];}
     try{c.transport=await api(`/api/commandes/${id}/transport`);}catch(_){c.transport=null;}
     try{c.jalons=await api(`/api/commandes/${id}/jalons`);}catch(_){c.jalons=[];}
+    try{c.jours=await api(`/api/commandes/${id}/jours`);}catch(_){c.jours=[];}
     renderCommandeDetail(c);
     markSeen(c.id,c.modifie_le);checkNotifications();
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
@@ -894,6 +895,54 @@ function jalonsBox(c){
   return `<h4 style="margin-top:4px">Suivi du jour J <span class="pill">${faits}/4</span></h4><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">${cells}</div>`;
 }
 async function toggleJalon(c,jalon,fait){try{await api(`/api/commandes/${c.id}/jalons/${jalon}`,{method:"PUT",body:{fait}});openCommande(c.id);}catch(e){toast(e.message,true);}}
+/* ---- Structure multi-jour ---- */
+function joursBox(c){
+  const js=c.jours||[];const can=canAddMateriel();
+  if(!js.length){
+    return `<h4 style="margin-top:18px">Déroulé multi-jour</h4><div class="state" style="padding:6px 0">Commande sur un seul jour.${can?" Ajoute des journées si l'événement s'étale (chargement, service, retour…).":""}</div>${can?`<div style="margin-top:8px"><button class="btn sm ghost" id="btnJours">Définir plusieurs jours…</button></div>`:""}`;
+  }
+  const rows=js.map(j=>{const dt=parseDate(j.jour_date);const ds=dt?dt.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"}):"—";
+    const h=[["🚚",j.heure_depart_marchandise],["👨‍🍳",j.heure_depart_cuisinier],["🧑‍💼",j.heure_arrivee_serveurs],["↩︎",j.heure_retour]].filter(x=>x[1]).map(x=>`${x[0]} ${esc(x[1])}`).join(" · ");
+    return `<tr><td><b>${esc(j.label||("Jour "+j.jour_index))}</b></td><td>${ds}</td><td>${h||"—"}</td><td>${j.notes?esc(j.notes):""}</td></tr>`;}).join("");
+  return `<h4 style="margin-top:18px">Déroulé multi-jour <span class="pill">${js.length} jour${js.length>1?"s":""}</span></h4><table class="grid"><thead><tr><th>Étape</th><th>Date</th><th>Horaires</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>${can?`<div style="margin-top:8px"><button class="btn sm ghost" id="btnJours">Modifier le déroulé multi-jour…</button></div>`:""}`;
+}
+function chargementBox(c){
+  const mats=c.materiel||[];const totMat=mats.reduce((s,m)=>s+(num(m.quantite)||0),0);
+  const bl=c.boissons_lignes||[];const totBois=bl.reduce((s,b)=>s+(num(b.sortie)||0),0);
+  if(!mats.length&&!bl.length)return "";
+  return `<h4 style="margin-top:18px">Chargement cumulé</h4><div class="ro-note" style="margin-bottom:6px">Total à transporter pour toute la commande (tous les jours confondus).</div><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:12px;color:var(--ink-soft)">Matériel</div><div style="font-size:20px;font-weight:700">${fmtN(totMat)} <span style="font-size:13px;font-weight:400;color:var(--ink-soft)">pièces · ${mats.length} réf.</span></div></div><div style="flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:12px;color:var(--ink-soft)">Boissons</div><div style="font-size:20px;font-weight:700">${fmtN(totBois)} <span style="font-size:13px;font-weight:400;color:var(--ink-soft)">unités · ${bl.length} réf.</span></div></div></div>`;
+}
+function openJoursEditor(c,onDone){
+  const init=(c.jours&&c.jours.length)?c.jours:[{}];
+  openModal(`<div class="modal-head"><div><h3>Déroulé multi-jour</h3><div class="meta">${esc(c.client||"Commande")}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="ro-note" style="margin-bottom:10px">Un jour par étape (chargement, service, retour…). Tout retirer = retour à un seul jour.</div>
+      <div id="joursList"></div>
+      <button class="btn ghost sm" id="jAdd" style="margin-top:4px">+ Ajouter un jour</button>
+      <button class="btn full" id="jSave" style="margin-top:12px"><span class="spin"></span><span class="label">Enregistrer le déroulé</span></button>
+      <div class="msg err" id="jMsg"></div></div>`);
+  const list=$("joursList");
+  const addRow=(j)=>{j=j||{};const d=document.createElement("div");d.className="jrow";d.style.cssText="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px";
+    d.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="field" style="flex:2;min-width:150px;margin:0"><label>Libellé</label><input class="jLabel" placeholder="ex. Chargement J-1, Service, Retour" value="${j.label?esc(j.label):""}"></div>
+      <div class="field" style="flex:1;min-width:130px;margin:0"><label>Date</label><input class="jDate" type="date" value="${j.jour_date?esc(String(j.jour_date).slice(0,10)):""}"></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <div class="field" style="flex:1;min-width:104px;margin:0"><label>🚚 Dép. march.</label><input class="jHDM" type="time" value="${j.heure_depart_marchandise?esc(j.heure_depart_marchandise):""}"></div>
+      <div class="field" style="flex:1;min-width:104px;margin:0"><label>👨‍🍳 Dép. cuis.</label><input class="jHDC" type="time" value="${j.heure_depart_cuisinier?esc(j.heure_depart_cuisinier):""}"></div>
+      <div class="field" style="flex:1;min-width:104px;margin:0"><label>🧑‍💼 Arr. serv.</label><input class="jHAS" type="time" value="${j.heure_arrivee_serveurs?esc(j.heure_arrivee_serveurs):""}"></div>
+      <div class="field" style="flex:1;min-width:104px;margin:0"><label>↩︎ Retour</label><input class="jHR" type="time" value="${j.heure_retour?esc(j.heure_retour):""}"></div></div>
+      <div class="field" style="margin:8px 0 0"><label>Notes</label><input class="jNotes" placeholder="précisions du jour" value="${j.notes?esc(j.notes):""}"></div>
+      <button type="button" class="btn danger sm jDel" style="margin-top:6px">Retirer ce jour</button>`;
+    d.querySelector(".jDel").addEventListener("click",()=>d.remove());list.appendChild(d);};
+  init.forEach(addRow);
+  $("jAdd").addEventListener("click",()=>addRow({}));
+  $("jSave").addEventListener("click",async()=>{
+    const jours=[...list.querySelectorAll(".jrow")].map((d,i)=>({jour_index:i+1,label:d.querySelector(".jLabel").value,jour_date:d.querySelector(".jDate").value,heure_depart_marchandise:d.querySelector(".jHDM").value,heure_depart_cuisinier:d.querySelector(".jHDC").value,heure_arrivee_serveurs:d.querySelector(".jHAS").value,heure_retour:d.querySelector(".jHR").value,notes:d.querySelector(".jNotes").value})).filter(j=>j.label||j.jour_date||j.heure_depart_marchandise||j.heure_depart_cuisinier||j.heure_arrivee_serveurs||j.heure_retour||j.notes);
+    const btn=$("jSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(`/api/commandes/${c.id}/jours`,{method:"PUT",body:{jours}});toast("Déroulé enregistré.");if(typeof onDone==="function")onDone();else closeModal();}
+    catch(e){$("jMsg").textContent=e.message;$("jMsg").classList.add("show");btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -949,7 +998,9 @@ function renderCommandeDetail(c){
       ${materielLocationBox(c)}
       ${materielSortieBox(c)}
       ${transportBox(c)}
+      ${chargementBox(c)}
       ${horairesBox(c)}
+      ${joursBox(c)}
       ${ficheEvenementBox(c)}
       <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prCuisine">🖨 Cuisine</button><button class="btn sm ghost" id="prMateriel">🖨 Matériel</button><button class="btn sm ghost" id="prAllerg">🖨 Allergènes</button><button class="btn sm" id="prAll">🖨 Tout imprimer</button></div>
       ${canOps()?`<div style="margin-top:12px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
@@ -976,6 +1027,7 @@ function renderCommandeDetail(c){
   if($("btnLocation"))$("btnLocation").addEventListener("click",()=>openLocationEditor(c,()=>openCommande(c.id)));
   if($("btnTransport"))$("btnTransport").addEventListener("click",()=>openTransportEditor(c,()=>openCommande(c.id)));
   if($("btnBilan"))$("btnBilan").addEventListener("click",()=>openBilanEditor(c,()=>openCommande(c.id)));
+  if($("btnJours"))$("btnJours").addEventListener("click",()=>openJoursEditor(c,()=>openCommande(c.id)));
   $("modal").querySelectorAll("[data-jalon]").forEach(b=>b.addEventListener("click",()=>toggleJalon(c,b.dataset.jalon,b.dataset.fait!=="1")));
   wireSortie(c,()=>openCommande(c.id));
 }
