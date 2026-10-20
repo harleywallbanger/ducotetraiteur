@@ -1258,11 +1258,12 @@ async function loadUsers(){
   try{
     const list=await api("/api/utilisateurs");
     const rows=list.map(u=>{const me=u.id===session.user.id;const blocked=!!u.bloque;
-      return `<tr class="${blocked?"alert":""}"><td>${esc(u.nom)}${me?` <span class="pill">vous</span>`:""}</td><td>${esc(u.email)}</td><td>${ROLE_LABEL[u.role]||esc(u.role)}</td><td>${blocked?`<span class="pill pill-alert">bloqué</span>`:`<span class="status s-ok"><span class="pip"></span>actif</span>`}</td><td>${me?"":`<button class="btn ghost sm" data-block="${u.id}" data-b="${blocked?1:0}" data-nom="${esc(u.nom)}">${blocked?"Débloquer":"Bloquer"}</button> `}<button class="btn ghost sm" data-pwd="${u.id}" data-nom="${esc(u.nom)}">Mot de passe</button>${me?"":` <button class="btn danger sm" data-del="${u.id}" data-nom="${esc(u.nom)}">Supprimer</button>`}</td></tr>`;}).join("")||`<tr><td colspan="5">Aucun utilisateur</td></tr>`;
+      return `<tr class="${blocked?"alert":""}"><td>${esc(u.nom)}${me?` <span class="pill">vous</span>`:""}</td><td>${esc(u.email)}</td><td>${ROLE_LABEL[u.role]||esc(u.role)}</td><td>${blocked?`<span class="pill pill-alert">bloqué</span>`:`<span class="status s-ok"><span class="pip"></span>actif</span>`}</td><td>${me?"":`<button class="btn ghost sm" data-block="${u.id}" data-b="${blocked?1:0}" data-nom="${esc(u.nom)}">${blocked?"Débloquer":"Bloquer"}</button> `}<button class="btn ghost sm" data-pwd="${u.id}" data-nom="${esc(u.nom)}">Mot de passe</button> <button class="btn ghost sm" data-send="${u.id}" data-nom="${esc(u.nom)}" data-mail="${esc(u.email)}">Envoyer l'accès</button>${me?"":` <button class="btn danger sm" data-del="${u.id}" data-nom="${esc(u.nom)}">Supprimer</button>`}</td></tr>`;}).join("")||`<tr><td colspan="5">Aucun utilisateur</td></tr>`;
     box.innerHTML=`<table class="grid"><thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>État</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
     box.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>delUser(b.dataset.del,b.dataset.nom)));
     box.querySelectorAll("[data-block]").forEach(b=>b.addEventListener("click",()=>blockUser(b.dataset.block,b.dataset.b==="1",b.dataset.nom)));
     box.querySelectorAll("[data-pwd]").forEach(b=>b.addEventListener("click",()=>openPwd(b.dataset.pwd,b.dataset.nom)));
+    box.querySelectorAll("[data-send]").forEach(b=>b.addEventListener("click",()=>sendAccess(b.dataset.send,b.dataset.nom,b.dataset.mail)));
   }catch(e){box.innerHTML=`<div class="state"><b>Accès indisponible</b>${esc(e.message)}</div>`;}
 }
 function openNewUser(){
@@ -1272,17 +1273,24 @@ function openNewUser(){
       <div class="field"><label>Email</label><input id="nuEmail" type="email" placeholder="employe@traiteur.fr"></div>
       <div class="field"><label>Mot de passe initial</label><input id="nuPwd" type="text" placeholder="À communiquer à la personne"></div>
       <div class="field"><label>Rôle</label><select id="nuRole"><option value="preparateur">Préparateur</option><option value="cuisinier">Cuisinier</option><option value="serveur">Serveur</option><option value="maitre_hotel">Maître d'hôtel</option><option value="chef">Chef cuisinier</option><option value="manager">Gérant</option><option value="admin">Administrateur</option></select></div>
+      <div class="field"><label class="check"><input type="checkbox" id="nuSendMail"><span>✉️ Envoyer les accès par email (lien + identifiants + icône)</span></label></div>
       <button class="btn full" id="nuSave"><span class="spin"></span><span class="label">Créer le compte</span></button>
       <div class="msg err" id="nuMsg"></div></div>`);
   $("nuSave").addEventListener("click",async()=>{
     const m=$("nuMsg");m.classList.remove("show");
     const nom=$("nuNom").value.trim(),email=$("nuEmail").value.trim(),mot_de_passe=$("nuPwd").value,role=$("nuRole").value;
     if(!nom||!email||!mot_de_passe){m.textContent="Nom, email et mot de passe sont requis.";m.classList.add("show");return;}
+    const envoyer_email=$("nuSendMail").checked;
     const btn=$("nuSave");btn.classList.add("loading");btn.disabled=true;
-    try{await api("/api/utilisateurs",{method:"POST",body:{nom,email,mot_de_passe,role}});closeModal();toast("Compte créé.");loadUsers();}
+    try{const r=await api("/api/utilisateurs",{method:"POST",body:{nom,email,mot_de_passe,role,envoyer_email}});closeModal();
+      if(envoyer_email&&r&&r.email_envoye===false)toast("Compte créé, mais email non envoyé : "+(r.email_erreur||"erreur"),true);
+      else if(envoyer_email)toast("Compte créé et accès envoyés par email.");
+      else toast("Compte créé.");
+      loadUsers();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }
+async function sendAccess(id,nom,mail){if(!confirm(`Envoyer les accès à ${nom}${mail?` (${mail})`:""} ?\n\nUn nouveau mot de passe temporaire sera généré et envoyé par email. L'ancien ne fonctionnera plus.`))return;try{await api(`/api/utilisateurs/${id}/envoyer-acces`,{method:"POST"});toast("Accès envoyés par email.");}catch(e){toast(e.message,true);}}
 async function delUser(id,nom){if(!confirm(`Supprimer définitivement le compte de ${nom} ?`))return;try{await api(`/api/utilisateurs/${id}`,{method:"DELETE"});toast("Compte supprimé.");loadUsers();}catch(e){toast(e.message,true);}}
 async function blockUser(id,blocked,nom){try{await api(`/api/utilisateurs/${id}/blocage`,{method:"PUT",body:{bloque:!blocked}});toast(blocked?"Compte débloqué.":"Compte bloqué.");loadUsers();}catch(e){toast(e.message,true);}}
 function openPwd(id,nom){
