@@ -419,4 +419,18 @@ router.get('/commandes-modifs', ah(async (req, res) => {
   res.json(rows);
 }));
 
+/* ---- Numéro de référence par matériel ---- */
+router.get('/materiels-numeros', ah(async (req, res) => {
+  const { rows } = await pool.query('SELECT id, numero FROM materiels ORDER BY nom');
+  res.json(rows);
+}));
+router.put('/materiels/:id/numero', requireMaterielEditor, ah(async (req, res) => {
+  const numero = (req.body && req.body.numero != null && String(req.body.numero).trim() !== '') ? String(req.body.numero).trim() : null;
+  const { rows } = await pool.query(
+    'UPDATE materiels SET numero=$1 WHERE id=$2 RETURNING id, nom, numero',
+    [numero, req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Matériel introuvable' });
+  res.json(rows[0]);
+}));
+
 module.exports = router;

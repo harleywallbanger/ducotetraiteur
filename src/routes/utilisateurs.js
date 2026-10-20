@@ -3,7 +3,7 @@ const { pool } = require('../db');
 const { requireAccountManager, hashPassword } = require('../auth');
 const ah = require('../ah');
 
-const ROLES = ['admin', 'manager', 'chef', 'cuisinier', 'preparateur'];
+const ROLES = ['admin', 'manager', 'chef', 'cuisinier', 'preparateur', 'maitre_hotel', 'serveur'];
 
 // Toutes les routes de gestion des comptes sont réservées à l'admin ou au gérant
 router.use(requireAccountManager);

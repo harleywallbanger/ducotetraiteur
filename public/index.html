@@ -226,22 +226,22 @@ let session={token:null,user:null};
 const role=()=> session.user ? session.user.role : null;
 const isAdmin=()=> role()==="admin";
 const canAccounts=()=> role()==="admin"||role()==="manager";
-const canOps=()=> role()==="manager";                       // commandes, stock
-const canRecipes=()=> role()==="manager"||role()==="chef";  // recettes + quantités
-const canAddMateriel=()=>["admin","manager","preparateur"].includes(role());  // créer/gérer matériel + stock
-const canAddIngredient=()=>["admin","manager","chef"].includes(role());        // créer ingrédients (cuisine)
+const canOps=()=>["manager","maitre_hotel","serveur"].includes(role());                       // commandes, stock
+const canRecipes=()=>["manager","chef","maitre_hotel","serveur"].includes(role());  // recettes + quantités
+const canAddMateriel=()=>["admin","manager","preparateur","maitre_hotel","serveur"].includes(role());  // créer/gérer matériel + stock
+const canAddIngredient=()=>["admin","manager","chef","maitre_hotel","serveur"].includes(role());        // créer ingrédients (cuisine)
 
-const ROLE_LABEL={admin:"Administrateur",manager:"Gérant",chef:"Chef cuisinier",cuisinier:"Cuisinier",preparateur:"Préparateur"};
+const ROLE_LABEL={admin:"Administrateur",manager:"Gérant",chef:"Chef cuisinier",cuisinier:"Cuisinier",preparateur:"Préparateur",maitre_hotel:"Maître d'hôtel",serveur:"Serveur"};
 const ALLERGENES=[["gluten","Gluten"],["crustaces","Crustacés"],["oeufs","Œufs"],["poisson","Poisson"],["arachides","Arachides"],["soja","Soja"],["lait","Lait"],["fruits_coque","Fruits à coque"],["celeri","Céleri"],["moutarde","Moutarde"],["sesame","Sésame"],["sulfites","Sulfites"],["lupin","Lupin"],["mollusques","Mollusques"]];
 const ALLERG_LABEL=Object.fromEntries(ALLERGENES);
 const allergKeys=(s)=>s?String(s).split(",").map(x=>x.trim()).filter(Boolean):[];
 const TABS=[
-  {id:"commandes",label:"Commandes",roles:["admin","manager","chef","cuisinier"]},
-  {id:"clients",label:"Clients",roles:["admin","manager"]},
-  {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef","preparateur"]},
-  {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier"]},
+  {id:"commandes",label:"Commandes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
+  {id:"clients",label:"Clients",roles:["admin","manager","maitre_hotel","serveur"]},
+  {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
+  {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
   {id:"admin",label:"Administration",roles:["admin","manager"]},
-  {id:"prep",label:"Préparation",roles:["chef","preparateur"]},
+  {id:"prep",label:"Préparation",roles:["chef","preparateur","maitre_hotel","serveur"]},
 ];
 
 const MOIS=["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"];
@@ -939,11 +939,12 @@ async function renderStock(){
     let usageMap={};try{const us=await api("/api/materiels-usage");us.forEach(u=>{usageMap[u.id]=u.usage_type;});}catch(_){}
     let sortiMap={};try{const ss=await api("/api/materiels-sorties");ss.forEach(s=>{sortiMap[s.materiel_id]=Number(s.sorti)||0;});}catch(_){}
     let transMap={};try{const tt=await api("/api/materiels-transport");tt.forEach(t=>{transMap[t.id]={h:t.necessite_hayon,f:t.necessite_frigo};});}catch(_){}
+    let numMap={};try{const nn=await api("/api/materiels-numeros");nn.forEach(n=>{numMap[n.id]=n.numero||"";});}catch(_){}
     const usageChip=u=>{const lbl={normal:"Normal",jetable:"Jetable",les_deux:"Les deux"}[u||"les_deux"]||"Les deux";return `<span class="pill" style="background:var(--paper);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:600">${lbl}</span>`;};
     const transChip=id=>{const t=transMap[id]||{};return `${t.h?` <span class="pill" title="Nécessite un hayon">🛗 hayon</span>`:""}${t.f?` <span class="pill" title="Nécessite un transport réfrigéré">❄️ frigo</span>`:""}`;};
     const dispoCell=x=>{const sorti=sortiMap[x.materiel_id]||0;const dispo=Number(x.quantite_stock||0)-sorti;return `<span style="font-weight:700${dispo<0?";color:var(--court)":""}">${fmtN(dispo)}</span>${sorti>0?`<span class="ro-note" style="display:block;font-size:11px">${fmtN(sorti)} sur site</span>`:""}`;};
     const banner=a?`<div class="legend2"><span><span class="pip" style="background:var(--court)"></span> ${a} article${a>1?"s":""} sous le seuil</span></div>`:`<div class="legend2"><span><span class="pip" style="background:var(--ok)"></span> Tout le matériel est au-dessus de son seuil</span></div>`;
-    const rows=inv.map(x=>`<tr class="${x.en_alerte?"alert":""}"><td>${esc(x.nom)}</td><td class="num">${fmtN(x.quantite_stock)} ${esc(x.unite||"")}</td><td class="num">${dispoCell(x)}</td><td class="num">${fmtN(x.seuil_alerte)}</td><td>${x.en_alerte?`<span class="pill pill-alert">à réapprovisionner</span>`:`<span class="status s-ok"><span class="pip"></span>OK</span>`}</td><td>${usageChip(usageMap[x.materiel_id])}${transChip(x.materiel_id)}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-edit="${x.materiel_id}" data-nom="${esc(x.nom)}" data-stock="${esc(x.quantite_stock)}" data-seuil="${esc(x.seuil_alerte)}" data-usage="${esc(usageMap[x.materiel_id]||"les_deux")}" data-hayon="${transMap[x.materiel_id]&&transMap[x.materiel_id].h?1:0}" data-frigo="${transMap[x.materiel_id]&&transMap[x.materiel_id].f?1:0}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?7:6}">Aucun matériel</td></tr>`;
+    const rows=inv.map(x=>`<tr class="${x.en_alerte?"alert":""}"><td>${numMap[x.materiel_id]?`<span class="ro-note" style="display:block;font-size:11px">N° ${esc(numMap[x.materiel_id])}</span>`:""}${esc(x.nom)}</td><td class="num">${fmtN(x.quantite_stock)} ${esc(x.unite||"")}</td><td class="num">${dispoCell(x)}</td><td class="num">${fmtN(x.seuil_alerte)}</td><td>${x.en_alerte?`<span class="pill pill-alert">à réapprovisionner</span>`:`<span class="status s-ok"><span class="pip"></span>OK</span>`}</td><td>${usageChip(usageMap[x.materiel_id])}${transChip(x.materiel_id)}</td>${canAddMateriel()?`<td><button class="btn ghost sm" data-edit="${x.materiel_id}" data-nom="${esc(x.nom)}" data-num="${esc(numMap[x.materiel_id]||"")}" data-stock="${esc(x.quantite_stock)}" data-seuil="${esc(x.seuil_alerte)}" data-usage="${esc(usageMap[x.materiel_id]||"les_deux")}" data-hayon="${transMap[x.materiel_id]&&transMap[x.materiel_id].h?1:0}" data-frigo="${transMap[x.materiel_id]&&transMap[x.materiel_id].f?1:0}">Modifier</button></td>`:""}</tr>`).join("")||`<tr><td colspan="${canAddMateriel()?7:6}">Aucun matériel</td></tr>`;
     $("stockBox").innerHTML=banner+`<table class="grid"><thead><tr><th>Matériel</th><th class="num">En stock</th><th class="num">Disponible</th><th class="num">Seuil</th><th>État</th><th>Usage</th>${canAddMateriel()?"<th></th>":""}</tr></thead><tbody>${rows}</tbody></table>`;
     if(canAddMateriel())$("stockBox").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>editStock(b.dataset)));
     try{
@@ -964,6 +965,7 @@ async function renderStock(){
 function editStock(d){
   openModal(`<div class="modal-head"><div><h3>${esc(d.nom)}</h3><div class="meta">Stock, seuil et usage</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
+      <div class="field"><label>Numéro de référence</label><input id="esNum" placeholder="ex. M-042" value="${esc(d.num||"")}"></div>
       <div class="field"><label>Quantité en stock</label><input id="esStock" type="number" min="0" step="any" value="${esc(d.stock)}"></div>
       <div class="field"><label>Seuil d'alerte</label><input id="esSeuil" type="number" min="0" step="any" value="${esc(d.seuil)}"></div>
       <div class="field"><label>Usage selon le type de prestation</label><select id="esUsage"><option value="les_deux"${(!d.usage||d.usage==="les_deux")?" selected":""}>Les deux — compté dans tous les cas</option><option value="normal"${d.usage==="normal"?" selected":""}>Normal — buffet uniquement</option><option value="jetable"${d.usage==="jetable"?" selected":""}>Jetable — livré uniquement</option></select></div>
@@ -979,6 +981,7 @@ function editStock(d){
     try{await api(`/api/materiels/${d.edit}/inventaire`,{method:"PUT",body:{quantite_stock,seuil_alerte}});
         if(usage_type){try{await api(`/api/materiels/${d.edit}/usage`,{method:"PUT",body:{usage_type}});}catch(_){}}
         try{await api(`/api/materiels/${d.edit}/transport`,{method:"PUT",body:{necessite_hayon,necessite_frigo}});}catch(_){}
+        try{await api(`/api/materiels/${d.edit}/numero`,{method:"PUT",body:{numero:($("esNum")?$("esNum").value.trim():"")}});}catch(_){}
         closeModal();toast("Matériel mis à jour.");renderStock();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
