@@ -192,8 +192,8 @@ router.put('/commandes/:id/type-prestation', requireManager, ah(async (req, res)
   const t = String((req.body && req.body.type_prestation) || '').trim();
   if (!['buffet', 'livre'].includes(t)) return res.status(400).json({ error: 'Type de prestation invalide' });
   const { rows } = await pool.query(
-    'UPDATE commandes SET type_prestation = $1 WHERE id = $2 RETURNING id, type_prestation',
-    [t, req.params.id]
+    'UPDATE commandes SET type_prestation = $1, modifie_par = $2 WHERE id = $3 RETURNING id, type_prestation',
+    [t, req.user.nom || null, req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Commande introuvable' });
   res.json(rows[0]);
@@ -362,8 +362,8 @@ router.put('/commandes/:id/transport', requireMaterielEditor, ah(async (req, res
   const camion_id = (req.body && req.body.camion_id) ? Number(req.body.camion_id) : null;
   const refrig = !!(req.body && req.body.transport_refrigere);
   const { rows } = await pool.query(
-    'UPDATE commandes SET camion_id=$1, transport_refrigere=$2 WHERE id=$3 RETURNING id',
-    [camion_id, refrig, req.params.id]);
+    'UPDATE commandes SET camion_id=$1, transport_refrigere=$2, modifie_par=$3 WHERE id=$4 RETURNING id',
+    [camion_id, refrig, req.user.nom || null, req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable' });
   res.json({ ok: true });
 }));
@@ -405,9 +405,10 @@ router.put('/commandes/:id/horaires', requireMaterielEditor, ah(async (req, res)
         heure_depart_marchandise = $1,
         heure_depart_cuisinier   = $2,
         heure_arrivee_serveurs   = $3,
-        heure_retour             = $4
-      WHERE id = $5 RETURNING id`,
-    [clean(b.heure_depart_marchandise), clean(b.heure_depart_cuisinier), clean(b.heure_arrivee_serveurs), clean(b.heure_retour), req.params.id]);
+        heure_retour             = $4,
+        modifie_par              = $5
+      WHERE id = $6 RETURNING id`,
+    [clean(b.heure_depart_marchandise), clean(b.heure_depart_cuisinier), clean(b.heure_arrivee_serveurs), clean(b.heure_retour), req.user.nom || null, req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable' });
   res.json({ ok: true });
 }));
@@ -415,7 +416,7 @@ router.put('/commandes/:id/horaires', requireMaterielEditor, ah(async (req, res)
 // Commandes récentes/à venir avec date de dernière modification (pour la notification d'ouverture)
 router.get('/commandes-modifs', ah(async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, client, date_event, modifie_le FROM commandes WHERE date_event >= (CURRENT_DATE - INTERVAL '2 days') ORDER BY modifie_le DESC NULLS LAST LIMIT 60");
+    "SELECT id, client, date_event, modifie_le, modifie_par FROM commandes WHERE date_event >= (CURRENT_DATE - INTERVAL '2 days') ORDER BY modifie_le DESC NULLS LAST LIMIT 60");
   res.json(rows);
 }));
 
@@ -492,8 +493,8 @@ router.delete('/personnel/:id', requireMaterielEditor, ah(async (req, res) => {
 router.put('/commandes/:id/bilan', requireMaterielEditor, ah(async (req, res) => {
   const clean = (v) => (v != null && String(v).trim() !== '') ? String(v).trim() : null;
   const { rows } = await pool.query(
-    'UPDATE commandes SET bilan_linge=$1, remarques_event=$2 WHERE id=$3 RETURNING id',
-    [clean(req.body && req.body.bilan_linge), clean(req.body && req.body.remarques_event), req.params.id]);
+    'UPDATE commandes SET bilan_linge=$1, remarques_event=$2, modifie_par=$3 WHERE id=$4 RETURNING id',
+    [clean(req.body && req.body.bilan_linge), clean(req.body && req.body.remarques_event), req.user.nom || null, req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable' });
   res.json({ ok: true });
 }));

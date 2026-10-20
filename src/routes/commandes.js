@@ -54,8 +54,8 @@ router.post('/', requireManager, ah(async (req, res) => {
   try {
     await cx.query('BEGIN');
     const { rows } = await cx.query(
-      'INSERT INTO commandes (client, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, cree_par) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
-      [clientNom, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, req.user.id]);
+      'INSERT INTO commandes (client, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, cree_par, modifie_par) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *',
+      [clientNom, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, req.user.id, req.user.nom || null]);
     for (const l of lignes)
       await cx.query(
         'INSERT INTO commande_recettes (commande_id, recette_id, nb_personnes) VALUES ($1, $2, $3)',
@@ -77,8 +77,8 @@ router.put('/:id', requireManager, ah(async (req, res) => {
   try {
     await cx.query('BEGIN');
     const { rows } = await cx.query(
-      'UPDATE commandes SET client=$1, client_tel=$2, client_email=$3, date_event=$4, couverts=$5, notes=$6, adresse=$7, lieu_descriptif=$8, contact_nom=$9, contact_tel=$10 WHERE id=$11 RETURNING *',
-      [clientNom, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, req.params.id]);
+      'UPDATE commandes SET client=$1, client_tel=$2, client_email=$3, date_event=$4, couverts=$5, notes=$6, adresse=$7, lieu_descriptif=$8, contact_nom=$9, contact_tel=$10, modifie_par=$11 WHERE id=$12 RETURNING *',
+      [clientNom, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, req.user.nom || null, req.params.id]);
     if (!rows[0]) { await cx.query('ROLLBACK'); return res.status(404).json({ error: 'Commande introuvable' }); }
     if (Array.isArray(lignes)) {
       await cx.query('DELETE FROM commande_recettes WHERE commande_id = $1', [req.params.id]);

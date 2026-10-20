@@ -332,7 +332,7 @@ async function checkNotifications(){
 function renderNotifBar(changed){
   const bar=$("notifBar");if(!bar)return;
   if(!changed||!changed.length){bar.innerHTML="";bar.style.display="none";return;}
-  const chips=changed.map(c=>{const dt=parseDate(c.date_event);const ds=dt?dt.toLocaleDateString("fr-FR",{day:"numeric",month:"short"}):"";return `<button class="nt-chip" data-cid="${c.id}">${esc(c.client||"Sans client")}${ds?` · ${ds}`:""}</button>`;}).join("");
+  const chips=changed.map(c=>{const dt=parseDate(c.date_event);const ds=dt?dt.toLocaleDateString("fr-FR",{day:"numeric",month:"short"}):"";const par=c.modifie_par?` — par ${esc(c.modifie_par)}`:"";return `<button class="nt-chip" data-cid="${c.id}">${esc(c.client||"Sans client")}${ds?` · ${ds}`:""}${par}</button>`;}).join("");
   bar.innerHTML=`<div class="notif"><span class="nt-lead">🔔 ${changed.length} commande${changed.length>1?"s":""} modifiée${changed.length>1?"s":""}</span><span class="nt-items">${chips}</span><button class="nt-clear" id="ntClear">Tout marquer comme vu</button></div>`;
   bar.style.display="block";
   bar.querySelectorAll(".nt-chip").forEach(b=>b.addEventListener("click",()=>openCommande(b.dataset.cid)));
@@ -796,7 +796,7 @@ function renderCommandeDetail(c){
   const me=c.materiel_extra||[];
   const materielExtraBox=(me.length||canAddMateriel())?`<h4 style="margin-top:18px">Matériel supplémentaire</h4>${me.length?`<table class="grid"><thead><tr><th>Matériel</th><th class="num">Quantité</th></tr></thead><tbody>${me.map(m=>`<tr><td>${esc(m.materiel)}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:`<div class="state" style="padding:6px 0">Aucun matériel supplémentaire.</div>`}${canAddMateriel()?`<button class="btn sm ghost" id="btnMatExtra" style="margin-top:8px">Modifier le matériel supplémentaire</button>`:""}`:"";
   $("modal").innerHTML=`
-    <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""} · ${c.type_prestation==="livre"?"🚚 Livré":"🍽 Buffet"}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""} · ${c.type_prestation==="livre"?"🚚 Livré":"🍽 Buffet"}${c.modifie_par?` · ✎ modifié par ${esc(c.modifie_par)}`:""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${notesBox}
       ${clientBox}
