@@ -533,7 +533,7 @@ async function renderCalendrier(){
   for(let i=0;i<lead;i++)cells+=`<div></div>`;
   for(let day=1;day<=ndays;day++){
     const ds=`${y}-${p(m+1)}-${p(day)}`,evs=byDay[ds]||[],isToday=ds===todayStr;
-    const items=evs.map(c=>{const cv=c.total_couverts||c.couverts;const jf=Number(c.jalons_faits)||0;const dot=jf>=4?"#1f7a5a":(jf>0?"#c8a24b":"#c9c2b4");return `<button class="cal-ev" data-cid="${c.id}" title="${esc(c.client||"Sans client")}${cv?` · ${cv} couverts`:""} · jour J ${jf}/4" style="text-align:left;border:1px solid var(--line);background:rgba(31,122,90,.08);border-radius:7px;padding:3px 6px;font-size:11.5px;line-height:1.25;cursor:pointer;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dot};margin-right:4px;vertical-align:middle"></span>${esc(c.client||"Sans client")}${cv?` · ${cv}c`:""}</button>`;}).join("");
+    const items=evs.map(c=>{const cv=c.total_couverts||c.couverts;const jf=Number(c.jalons_faits)||0;const dot=jf>=4?"#1f7a5a":(jf>0?"#c8a24b":"#c9c2b4");return `<button class="cal-ev" data-cid="${c.id}" title="${c.heure_debut?esc(c.heure_debut)+" · ":""}${esc(c.client||"Sans client")}${cv?` · ${cv} couverts`:""} · jour J ${jf}/4" style="text-align:left;border:1px solid var(--line);background:rgba(31,122,90,.08);border-radius:7px;padding:3px 6px;font-size:11.5px;line-height:1.25;cursor:pointer;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dot};margin-right:4px;vertical-align:middle"></span>${c.heure_debut?`<b>${esc(c.heure_debut)}</b> `:""}${esc(c.client||"Sans client")}${cv?` · ${cv}c`:""}</button>`;}).join("");
     cells+=`<div style="${cellBase}${isToday?";background:rgba(200,162,75,.12);border-color:#c8a24b":""}"><div style="font-size:12px;font-weight:700;color:${isToday?"#b4862f":"var(--ink-soft)"}">${day}</div>${items}</div>`;
   }
   $("calBox").innerHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px">${dow.map(d=>`<div style="text-align:center;font-size:12px;color:var(--ink-soft);font-weight:600">${d}</div>`).join("")}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:stretch">${cells}</div>${list.length?"":`<div class="state" style="margin-top:14px">Aucune commande ce mois-ci.</div>`}`;
@@ -566,7 +566,7 @@ async function loadCmdList(){
     if(!list.length){box.innerHTML=`<div class="state"><b>Aucune commande</b>Rien sur cette période.</div>`;return;}
     box.innerHTML=list.map(c=>{const dt=parseDate(c.date_event);const d=dt?String(dt.getDate()).padStart(2,"0"):"--";const mo=dt?MOIS[dt.getMonth()]:"";const cv=num(c.couverts);
       const isMod=changedSet.has(String(c.id));
-      return `<button class="ticket${isMod?" modif":""}" data-id="${c.id}">${isMod?`<div class="t-modif">✎ modifié</div>`:""}<div class="t-date"><div class="d">${d}</div><div class="m">${mo}</div></div><div class="t-title">${esc(c.client||"Sans client")}</div><div class="t-covers">${cv!=null?`<b>${fmtN(cv)}</b> pers.`:""}</div><div class="t-status">${statusChip(c.statut)}</div></button>`;}).join("");
+      return `<button class="ticket${isMod?" modif":""}" data-id="${c.id}">${isMod?`<div class="t-modif">✎ modifié</div>`:""}<div class="t-date"><div class="d">${d}</div><div class="m">${mo}</div></div><div class="t-title">${esc(c.client||"Sans client")}${c.heure_debut?`<div class="ro-note" style="font-weight:400;font-size:12px;margin-top:2px">🕐 ${esc(c.heure_debut)}</div>`:""}</div><div class="t-covers">${cv!=null?`<b>${fmtN(cv)}</b> pers.`:""}</div><div class="t-status">${statusChip(c.statut)}</div></button>`;}).join("");
     box.querySelectorAll(".ticket").forEach(t=>t.addEventListener("click",()=>openCommande(t.dataset.id)));
   }catch(e){box.innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
 }
@@ -932,7 +932,7 @@ function horairesBox(c){
   const deb=c.heure_debut,dm=c.heure_depart_marchandise,dc=c.heure_depart_cuisinier,as=c.heure_arrivee_serveurs,ret=c.heure_retour;
   const any=deb||dm||dc||as||ret;
   if(!any)return `<h4 style="margin-top:18px">Horaires</h4><div class="state" style="padding:6px 0">Aucun horaire renseigné.</div>`;
-  const rows=[["🎉 Début de l'événement",deb],["🚚 Départ marchandise",dm],["👨‍🍳 Départ cuisinier",dc],["🧑‍💼 Arrivée serveurs",as],["↩︎ Heure de retour",ret]].filter(r=>r[1]).map(r=>`<tr><td>${r[0]}</td><td class="num">${esc(r[1])}</td></tr>`).join("");
+  const rows=[["🕐 Début de prestation",deb],["🚚 Départ marchandise",dm],["👨‍🍳 Départ cuisinier",dc],["🧑‍💼 Arrivée serveurs",as],["↩︎ Heure de retour",ret]].filter(r=>r[1]).map(r=>`<tr><td>${r[0]}</td><td class="num">${esc(r[1])}</td></tr>`).join("");
   const deps=[minOf(dm),minOf(dc)].filter(x=>x!=null);const start=deps.length?Math.min(...deps):null;const end=minOf(ret);
   let tp="";if(start!=null&&end!=null){tp=`<div class="ro-note" style="margin-top:6px;display:inline-block">Temps passé : <b>${fmtDuree(end-start)}</b> (du 1ᵉʳ départ au retour)</div>`;}
   return `<h4 style="margin-top:18px">Horaires</h4><table class="grid"><tbody>${rows}</tbody></table>${tp}`;
@@ -1079,7 +1079,7 @@ function renderCommandeDetail(c){
   const me=c.materiel_extra||[];
   const materielExtraBox=(me.length||canAddMateriel())?`<h4 style="margin-top:18px">Matériel supplémentaire</h4>${me.length?`<table class="grid"><thead><tr><th>Matériel</th><th class="num">Quantité</th></tr></thead><tbody>${me.map(m=>`<tr><td>${esc(m.materiel)}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:`<div class="state" style="padding:6px 0">Aucun matériel supplémentaire.</div>`}${canAddMateriel()?`<button class="btn sm ghost" id="btnMatExtra" style="margin-top:8px">Modifier le matériel supplémentaire</button>`:""}`:"";
   $("modal").innerHTML=`
-    <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""} · ${c.type_prestation==="livre"?"🚚 Livré":"🍽 Buffet"}${c.modifie_par?` · ✎ modifié par ${esc(c.modifie_par)}`:""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-head"><div><h3>${esc(c.client||"Commande sans client")}</h3><div class="meta">${dt?dt.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""}${c.heure_debut?` · <b style="color:var(--bottle-2)">🕐 ${esc(c.heure_debut)}</b>`:""} · ${statusText(c.statut)}${num(c.couverts)!=null?` · ${fmtN(c.couverts)} PAX`:""} · ${c.type_prestation==="livre"?"🚚 Livré":"🍽 Buffet"}${c.modifie_par?` · ✎ modifié par ${esc(c.modifie_par)}`:""}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${notesBox}
       ${clientBox}
@@ -1162,7 +1162,7 @@ async function openCommandeForm(existing,prefill){
       <div class="field"><label>Camion (transport)</label><select id="ncCamion"><option value="">— Non assigné —</option>${camions.map(c=>`<option value="${c.id}"${edit&&String(existing.camion_id)===String(c.id)?" selected":""}>${esc(c.nom)}${c.hayon?" · hayon":""}${c.frigo?" · frigo":""}</option>`).join("")}</select></div>
       <div class="field"><label class="check"><input type="checkbox" id="ncRefrig"${edit&&existing.transport_refrigere?" checked":""}><span>❄️ Transport réfrigéré nécessaire</span></label></div>
       <h4>Horaires</h4>
-      <div class="field"><label>🎉 Heure de début de l'événement</label><input id="ncHDebut" type="time" value="${edit&&existing.heure_debut?esc(existing.heure_debut):""}"></div>
+      <div class="field"><label>🕐 Heure de début de prestation</label><input id="ncHDebut" type="time" value="${edit&&existing.heure_debut?esc(existing.heure_debut):""}"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div class="field" style="flex:1;min-width:130px"><label>Départ marchandise</label><input id="ncHDepMarch" type="time" value="${edit&&existing.heure_depart_marchandise?esc(existing.heure_depart_marchandise):""}"></div>
         <div class="field" style="flex:1;min-width:130px"><label>Départ cuisinier</label><input id="ncHDepCuis" type="time" value="${edit&&existing.heure_depart_cuisinier?esc(existing.heure_depart_cuisinier):""}"></div>
