@@ -14,6 +14,29 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // Santé (public)
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// --- DIAGNOSTIC TEMPORAIRE EMAIL (à retirer après debug) ---
+app.get('/api/_diag/mail', async (_req, res) => {
+  const key = process.env.BREVO_API_KEY || '';
+  const from = process.env.MAIL_FROM || '';
+  const info = { has_key: !!key, key_prefix: key ? key.slice(0, 12) : null, has_from: !!from, from, from_name: process.env.MAIL_FROM_NAME || null };
+  if (!key || !from) return res.json({ ...info, sent: false, reason: 'variable(s) manquante(s)' });
+  try {
+    const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': key, 'content-type': 'application/json', 'accept': 'application/json' },
+      body: JSON.stringify({
+        sender: { email: from, name: process.env.MAIL_FROM_NAME || 'Du Côté Traiteur' },
+        to: [{ email: from }],
+        subject: 'Test diagnostic — Du Côté Traiteur',
+        htmlContent: "<p>Test d'envoi automatique. Si vous recevez ceci, Brevo fonctionne.</p>",
+      }),
+    });
+    let body = null; try { body = await r.json(); } catch (_) { try { body = await r.text(); } catch (__) {} }
+    res.json({ ...info, brevo_status: r.status, brevo_body: body });
+  } catch (e) { res.json({ ...info, error: String((e && e.message) || e) }); }
+});
+// --- fin diagnostic ---
+
 // Authentification (public)
 app.use('/api/auth', require('./routes/auth'));
 
