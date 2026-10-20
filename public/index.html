@@ -1043,6 +1043,7 @@ function renderCommandeDetail(c){
       <h4>Recettes</h4>
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Personnes</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
+      ${c.tireuse_lieu&&c.tireuse_lieu.present?`<div class="ro-note" style="margin:6px 0;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper)">🍺 <b>Tireuse à bière fournie par le lieu</b>${c.tireuse_lieu.exclus&&c.tireuse_lieu.exclus.length?` — retirée des besoins : ${c.tireuse_lieu.exclus.map(esc).join(", ")}`:" (pensez-y si besoin de la rajouter manuellement)"}.</div>`:""}
       ${boissonsBox}
       ${materielExtraBox}
       ${materielLocationBox(c)}
@@ -1087,6 +1088,8 @@ async function openCommandeForm(existing,prefill){
   let recettes=[];try{recettes=await api("/api/recettes");}catch(e){toast(e.message,true);return;}
   if(!recettes.length){toast("Aucune recette. Créez-en d'abord.",true);return;}
   let lieux=[];try{lieux=await api("/api/lieux");}catch(_){lieux=[];}
+  let fiches=[];try{fiches=await api("/api/lieux/fiches");}catch(_){fiches=[];}
+  let selLieuId=(edit&&existing.lieu_id)?existing.lieu_id:null;
   let clients=[];try{clients=await api("/api/clients");}catch(_){clients=[];}
   let boissons=[];try{boissons=await api("/api/boissons");}catch(_){boissons=[];}
   let camions=[];try{camions=await api("/api/camions");}catch(_){camions=[];}
@@ -1114,6 +1117,7 @@ async function openCommandeForm(existing,prefill){
         <div class="field" style="flex:1;min-width:130px"><label>Arrivée serveurs</label><input id="ncHArrServ" type="time" value="${edit&&existing.heure_arrivee_serveurs?esc(existing.heure_arrivee_serveurs):""}"></div>
         <div class="field" style="flex:1;min-width:130px"><label>Heure de retour</label><input id="ncHRetour" type="time" value="${edit&&existing.heure_retour?esc(existing.heure_retour):""}"></div>
       </div>
+      ${fiches.length?`<div class="field"><label>Lieu de l'annuaire (optionnel)</label><select id="ncLieuFiche"><option value="">— Aucun —</option>${fiches.map(f=>`<option value="${f.id}"${edit&&String(existing.lieu_id)===String(f.id)?" selected":""}>${esc(f.nom)}</option>`).join("")}</select><div class="ro-note" style="margin-top:4px">🍺 Si le lieu a une tireuse à bière (dans sa description), elle sera retirée des besoins automatiquement.</div></div>`:""}
       ${lieux.length?`<div class="field"><label>Lieu déjà utilisé (optionnel)</label><select id="ncLieu"><option value="">— Nouveau lieu —</option>${lieux.map((l,i)=>`<option value="${i}">${esc(l.adresse)}</option>`).join("")}</select></div>`:""}
       <div class="field"><label>Adresse de l'événement</label><input id="ncAdresse" placeholder="Lieu / adresse complète" value="${edit&&existing.adresse?esc(existing.adresse):""}"></div>
       <div class="field"><label>Descriptif du lieu (équipements, accès…)</label><textarea id="ncLieuDesc" placeholder="Ex. cuisine équipée, bar avec tirage pression tête plate, accès par carte magnétique…">${edit&&existing.lieu_descriptif?esc(existing.lieu_descriptif):""}</textarea></div>
@@ -1137,13 +1141,14 @@ async function openCommandeForm(existing,prefill){
   if($("ncAddB"))$("ncAddB").addEventListener("click",()=>bRow());
   $("ncCouverts").addEventListener("input",()=>{const v=couvVal();box.querySelectorAll(".line-row .qty").forEach(i=>i.value=v);});
   if($("ncLieu"))$("ncLieu").addEventListener("change",()=>{const i=$("ncLieu").value;if(i==="")return;const l=lieux[Number(i)];if(!l)return;$("ncAdresse").value=l.adresse||"";$("ncLieuDesc").value=l.lieu_descriptif||"";$("ncContactNom").value=l.contact_nom||"";$("ncContactTel").value=l.contact_tel||"";});
+  if($("ncLieuFiche"))$("ncLieuFiche").addEventListener("change",()=>{const v=$("ncLieuFiche").value;selLieuId=v?Number(v):null;const f=fiches.find(x=>String(x.id)===v);if(f){$("ncAdresse").value=f.adresse||"";$("ncLieuDesc").value=f.description||"";$("ncContactNom").value=f.contact_nom||"";$("ncContactTel").value=f.contact_tel||"";}});
   if($("ncClientSel"))$("ncClientSel").addEventListener("change",()=>{const i=$("ncClientSel").value;if(i==="")return;const c=clients[Number(i)];if(!c)return;$("ncClient").value=c.client||"";$("ncClientTel").value=c.client_tel||"";$("ncClientEmail").value=c.client_email||"";});
   $("ncSave").addEventListener("click",async()=>{
     const m=$("ncMsg");m.classList.remove("show");const date_event=$("ncDate").value;
     const lignes=[...box.querySelectorAll(".line-row")].map(r=>({recette_id:Number(r.querySelector("select").value),nb_personnes:Number(r.querySelector(".qty").value)})).filter(l=>l.recette_id&&l.nb_personnes>0);
     if(!date_event||!lignes.length){m.textContent="Une date et au moins une recette sont requises.";m.classList.add("show");return;}
     const btn=$("ncSave");btn.classList.add("loading");btn.disabled=true;
-    const body={client:$("ncClient").value.trim()||null,client_tel:$("ncClientTel").value.trim()||null,client_email:$("ncClientEmail").value.trim()||null,date_event,couverts:(parseInt($("ncCouverts").value,10)||null),notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lignes};
+    const body={client:$("ncClient").value.trim()||null,client_tel:$("ncClientTel").value.trim()||null,client_email:$("ncClientEmail").value.trim()||null,date_event,couverts:(parseInt($("ncCouverts").value,10)||null),notes:$("ncNotes").value.trim()||null,adresse:$("ncAdresse").value.trim()||null,lieu_descriptif:$("ncLieuDesc").value.trim()||null,contact_nom:$("ncContactNom").value.trim()||null,contact_tel:$("ncContactTel").value.trim()||null,lieu_id:selLieuId,lignes};
     const boissonsSortie=bbox?[...bbox.querySelectorAll(".line-row")].map(r=>({boisson_id:Number(r.querySelector("select").value),sortie:Number(r.querySelector(".qty").value)||0})).filter(x=>x.boisson_id):[];
     const type_prestation=$("ncType")?$("ncType").value:"buffet";
     const camion_id=($("ncCamion")&&$("ncCamion").value)?Number($("ncCamion").value):null;
