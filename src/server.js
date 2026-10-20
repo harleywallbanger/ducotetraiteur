@@ -81,6 +81,8 @@ const { pool: _migPool } = require('./db');
       "CREATE TABLE IF NOT EXISTS commande_jalons (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, jalon TEXT NOT NULL, fait BOOLEAN DEFAULT false, fait_le TIMESTAMPTZ, fait_par TEXT, PRIMARY KEY (commande_id, jalon))",
       "CREATE TABLE IF NOT EXISTS inventaire_log (id SERIAL PRIMARY KEY, type TEXT, ref_id INTEGER, nom TEXT, theorique NUMERIC, reel NUMERIC, ecart NUMERIC, fait_par TEXT, fait_le TIMESTAMPTZ DEFAULT now())",
       "CREATE TABLE IF NOT EXISTS commande_jours (id SERIAL PRIMARY KEY, commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, jour_index INTEGER NOT NULL DEFAULT 1, jour_date DATE, label TEXT, heure_depart_marchandise TIME, heure_depart_cuisinier TIME, heure_arrivee_serveurs TIME, heure_retour TIME, notes TEXT)",
+      "CREATE TABLE IF NOT EXISTS lieux (id SERIAL PRIMARY KEY, nom TEXT NOT NULL, adresse TEXT, description TEXT, photo TEXT, contact_nom TEXT, contact_tel TEXT)",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS lieu_id INTEGER REFERENCES lieux(id) ON DELETE SET NULL",
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_hayon BOOLEAN DEFAULT false",
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_frigo BOOLEAN DEFAULT false",
       "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS camion_id INTEGER REFERENCES camions(id) ON DELETE SET NULL",

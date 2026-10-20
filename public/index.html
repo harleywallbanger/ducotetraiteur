@@ -246,6 +246,7 @@ const TABS=[
   {id:"inventaire",label:"Inventaire",roles:["admin","manager","preparateur","maitre_hotel","serveur"]},
   {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
   {id:"personnel",label:"Personnel",roles:["admin","manager","maitre_hotel","serveur"]},
+  {id:"lieux",label:"Lieux",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
   {id:"admin",label:"Administration",roles:["admin","manager"]},
   {id:"prep",label:"Préparation",roles:["chef","preparateur","maitre_hotel","serveur"]},
 ];
@@ -344,7 +345,56 @@ function renderNotifBar(changed){
 $("tabs").addEventListener("click",(e)=>{const b=e.target.closest("button[data-view]");if(b)switchView(b.dataset.view);});
 function switchView(view){
   [...$("tabs").children].forEach(b=>b.classList.toggle("active",b.dataset.view===view));
-  ({commandes:renderCommandes,calendrier:renderCalendrier,clients:renderClients,stock:renderStock,appros:renderAppros,inventaire:renderInventaire,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+  ({commandes:renderCommandes,calendrier:renderCalendrier,clients:renderClients,stock:renderStock,appros:renderAppros,inventaire:renderInventaire,lieux:renderLieux,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+}
+
+/* ---------- LIEUX (annuaire) ---------- */
+async function renderLieux(){
+  const can=canAddMateriel();
+  $("content").innerHTML=`<div class="head"><h2>Lieux</h2><div class="tools">${can?`<button class="btn sm" id="newLieu">+ Lieu</button>`:`<span class="ro-note">consultation seule</span>`}</div></div><div id="lieuxBox"><div class="state">Chargement…</div></div>`;
+  if(can)$("newLieu").addEventListener("click",()=>lieuModal(null));
+  let list=[];
+  try{list=await api("/api/lieux/fiches");}catch(e){$("lieuxBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;return;}
+  if(!list.length){$("lieuxBox").innerHTML=`<div class="state"><b>Aucun lieu</b>${can?"Ajoutez le premier avec « + Lieu ».":"L'annuaire est vide."}</div>`;return;}
+  $("lieuxBox").innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">${list.map(l=>{
+    const biere=/tireuse\s*(à|a)?\s*bi[èe]re/i.test(l.description||"");
+    return `<div style="background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+      ${l.photo?`<img src="${l.photo}" style="width:100%;height:150px;object-fit:cover">`:`<div style="height:150px;background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:28px">🏛</div>`}
+      <div style="padding:14px;display:flex;flex-direction:column;gap:5px;flex:1">
+        <div style="font-weight:700;font-size:15px">${esc(l.nom)}</div>
+        ${l.adresse?`<div class="ro-note">📍 ${esc(l.adresse)}</div>`:""}
+        ${l.description?`<div style="font-size:13px;color:var(--ink-soft);line-height:1.4">${esc(l.description)}</div>`:""}
+        ${biere?`<div><span class="pill">🍺 Tireuse à bière sur place</span></div>`:""}
+        ${(l.contact_nom||l.contact_tel)?`<div class="ro-note">👤 ${esc(l.contact_nom||"")}${l.contact_tel?` · ☎ ${esc(l.contact_tel)}`:""}</div>`:""}
+        ${can?`<div style="margin-top:6px"><button class="btn ghost sm" data-ledit="${l.id}">Modifier</button></div>`:""}
+      </div></div>`;}).join("")}</div>`;
+  if(can)$("lieuxBox").querySelectorAll("[data-ledit]").forEach(b=>b.addEventListener("click",()=>{const l=list.find(x=>String(x.id)===b.dataset.ledit);lieuModal(l);}));
+}
+function lieuModal(l){
+  const edit=!!(l&&l.id);
+  openModal(`<div class="modal-head"><div><h3>${edit?esc(l.nom):"Nouveau lieu"}</h3><div class="meta">Annuaire des lieux</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom</label><input id="luNom" placeholder="ex. Salle des fêtes de Bouxwiller" value="${edit?esc(l.nom):""}"></div>
+      <div class="field"><label>Adresse</label><input id="luAdr" placeholder="ex. 1 place du Château, 67330 Bouxwiller" value="${edit?esc(l.adresse||""):""}"></div>
+      <div class="field"><label>Description</label><textarea id="luDesc" placeholder="Accès, équipements sur place (ex. « tireuse à bière »), particularités…">${edit?esc(l.description||""):""}</textarea><div class="ro-note" style="margin-top:4px">💡 Si tu écris « tireuse à bière », elle sera automatiquement retirée des besoins des prestations à ce lieu.</div></div>
+      <div class="field" style="display:flex;gap:8px"><div style="flex:2"><label>Contact sur place</label><input id="luCNom" placeholder="Nom" value="${edit?esc(l.contact_nom||""):""}"></div><div style="flex:1"><label>Tél.</label><input id="luCTel" placeholder="Téléphone" value="${edit?esc(l.contact_tel||""):""}"></div></div>
+      ${edit?`<div class="field"><label>Photo</label><div id="luPhoto"></div></div>`:`<div class="ro-note">Enregistre d'abord le lieu pour ajouter une photo.</div>`}
+      <button class="btn full" id="luSave"><span class="spin"></span><span class="label">${edit?"Enregistrer":"Créer le lieu"}</span></button>
+      ${edit?`<button class="btn danger sm full" id="luDel" style="margin-top:8px">Supprimer ce lieu</button>`:""}
+      <div class="msg err" id="luMsg"></div></div>`);
+  const luPhotoCommit=edit?mountPhoto("luPhoto",`/api/lieux/fiches/${l.id}/photo`):null;
+  $("luSave").addEventListener("click",async()=>{
+    const m=$("luMsg");m.classList.remove("show");
+    const nom=$("luNom").value.trim();if(!nom){m.textContent="Nom requis.";m.classList.add("show");return;}
+    const body={nom,adresse:$("luAdr").value.trim(),description:$("luDesc").value.trim(),contact_nom:$("luCNom").value.trim(),contact_tel:$("luCTel").value.trim()};
+    const btn=$("luSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(edit?`/api/lieux/fiches/${l.id}`:"/api/lieux/fiches",{method:edit?"PUT":"POST",body});if(luPhotoCommit){try{await luPhotoCommit();}catch(_){}}closeModal();toast(edit?"Lieu mis à jour.":"Lieu créé.");renderLieux();}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+  if(edit&&$("luDel"))$("luDel").addEventListener("click",async()=>{
+    if(!confirm(`Supprimer le lieu « ${l.nom} » ?`))return;
+    try{await api(`/api/lieux/fiches/${l.id}`,{method:"DELETE"});closeModal();toast("Lieu supprimé.");renderLieux();}catch(e){toast(e.message,true);}
+  });
 }
 
 /* ---------- INVENTAIRE (comptage du stock réel) ---------- */
