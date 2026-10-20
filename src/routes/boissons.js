@@ -434,7 +434,7 @@ router.put('/materiels/:id/numero', requireMaterielEditor, ah(async (req, res) =
 }));
 
 /* ---- Photos (stockées en base, data URL) : matériel, boisson, camion ---- */
-const TABLES_PHOTO = { materiels: 'materiels', boissons: 'boissons', camions: 'camions' };
+const TABLES_PHOTO = { materiels: 'materiels', boissons: 'boissons', camions: 'camions', recettes: 'recettes', personnel: 'personnel' };
 const MAX_PHOTO = 3 * 1024 * 1024; // ~3 Mo de base64
 
 function routePhoto(seg, table) {
@@ -455,5 +455,37 @@ function routePhoto(seg, table) {
   }));
 }
 for (const [seg, table] of Object.entries(TABLES_PHOTO)) routePhoto(seg, table);
+
+/* ---- Annuaire du personnel ---- */
+router.get('/personnel', ah(async (req, res) => {
+  const { rows } = await pool.query('SELECT id, nom, fonction, tel, COALESCE(actif,true) AS actif, photo FROM personnel ORDER BY nom');
+  res.json(rows);
+}));
+router.post('/personnel', requireMaterielEditor, ah(async (req, res) => {
+  const nom = String((req.body && req.body.nom) || '').trim();
+  if (!nom) return res.status(400).json({ error: 'Nom requis' });
+  const fonction = (req.body && req.body.fonction != null && String(req.body.fonction).trim() !== '') ? String(req.body.fonction).trim() : null;
+  const tel = (req.body && req.body.tel != null && String(req.body.tel).trim() !== '') ? String(req.body.tel).trim() : null;
+  const { rows } = await pool.query(
+    'INSERT INTO personnel (nom, fonction, tel) VALUES ($1,$2,$3) RETURNING id, nom, fonction, tel, actif',
+    [nom, fonction, tel]);
+  res.status(201).json(rows[0]);
+}));
+router.put('/personnel/:id', requireMaterielEditor, ah(async (req, res) => {
+  const nom = String((req.body && req.body.nom) || '').trim();
+  if (!nom) return res.status(400).json({ error: 'Nom requis' });
+  const fonction = (req.body && req.body.fonction != null && String(req.body.fonction).trim() !== '') ? String(req.body.fonction).trim() : null;
+  const tel = (req.body && req.body.tel != null && String(req.body.tel).trim() !== '') ? String(req.body.tel).trim() : null;
+  const actif = (req.body && req.body.actif != null) ? !!req.body.actif : true;
+  const { rows } = await pool.query(
+    'UPDATE personnel SET nom=$1, fonction=$2, tel=$3, actif=$4 WHERE id=$5 RETURNING id, nom, fonction, tel, actif',
+    [nom, fonction, tel, actif, req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Personne introuvable' });
+  res.json(rows[0]);
+}));
+router.delete('/personnel/:id', requireMaterielEditor, ah(async (req, res) => {
+  await pool.query('DELETE FROM personnel WHERE id=$1', [req.params.id]);
+  res.status(204).end();
+}));
 
 module.exports = router;

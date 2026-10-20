@@ -235,11 +235,14 @@ const ROLE_LABEL={admin:"Administrateur",manager:"Gérant",chef:"Chef cuisinier"
 const ALLERGENES=[["gluten","Gluten"],["crustaces","Crustacés"],["oeufs","Œufs"],["poisson","Poisson"],["arachides","Arachides"],["soja","Soja"],["lait","Lait"],["fruits_coque","Fruits à coque"],["celeri","Céleri"],["moutarde","Moutarde"],["sesame","Sésame"],["sulfites","Sulfites"],["lupin","Lupin"],["mollusques","Mollusques"]];
 const ALLERG_LABEL=Object.fromEntries(ALLERGENES);
 const allergKeys=(s)=>s?String(s).split(",").map(x=>x.trim()).filter(Boolean):[];
+const FONCTIONS=[["maitre_hotel","Maître d'hôtel"],["serveur","Serveur"],["chef","Chef"],["cuisinier","Cuisinier"],["preparateur","Préparateur"],["livreur","Livreur"],["extra","Extra"],["autre","Autre"]];
+const FONCTION_LABEL=Object.fromEntries(FONCTIONS);
 const TABS=[
   {id:"commandes",label:"Commandes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
   {id:"clients",label:"Clients",roles:["admin","manager","maitre_hotel","serveur"]},
   {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
   {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
+  {id:"personnel",label:"Personnel",roles:["admin","manager","maitre_hotel","serveur"]},
   {id:"admin",label:"Administration",roles:["admin","manager"]},
   {id:"prep",label:"Préparation",roles:["chef","preparateur","maitre_hotel","serveur"]},
 ];
@@ -338,7 +341,7 @@ function renderNotifBar(changed){
 $("tabs").addEventListener("click",(e)=>{const b=e.target.closest("button[data-view]");if(b)switchView(b.dataset.view);});
 function switchView(view){
   [...$("tabs").children].forEach(b=>b.classList.toggle("active",b.dataset.view===view));
-  ({commandes:renderCommandes,clients:renderClients,stock:renderStock,recettes:renderRecettes,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+  ({commandes:renderCommandes,clients:renderClients,stock:renderStock,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
 }
 
 /* ---------- helpers ---------- */
@@ -1112,9 +1115,11 @@ async function openRecetteEditor(id){
       <div class="field"><label>Précisions allergènes (optionnel)</label><input id="reAllergLibre" placeholder="ex. traces de fruits à coque" value="${rec&&rec.allergenes_libre?esc(rec.allergenes_libre):""}"></div>
       <h4>Ingrédients (cuisine)</h4><div id="reIng"></div><button class="btn ghost sm" id="reIngAdd" style="margin:4px 0 8px">+ Ingrédient</button>
       <h4>Matériel</h4><div id="reMat"></div><button class="btn ghost sm" id="reMatAdd" style="margin:4px 0 14px">+ Matériel</button>
+      ${id?`<div class="field"><label>Photo</label><div id="rePhoto"></div></div>`:""}
       <button class="btn full" id="reSave"><span class="spin"></span><span class="label">${id?"Enregistrer":"Créer la recette"}</span></button>
       <div class="msg err" id="reMsg"></div>
     </div>`);
+  const rePhotoCommit=id?mountPhoto("rePhoto",`/api/recettes/${id}/photo`):null;
   const ingBox=$("reIng"),matBox=$("reMat");
   function ingRow(sel,q){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${ingOpts}</select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><button class="rm">×</button>`;if(sel!=null)r.querySelector("select").value=sel;r.querySelector(".rm").addEventListener("click",()=>r.remove());ingBox.appendChild(r);}
   function matRow(sel,mode,q,cap){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select class="m-art">${matOpts}</select><select class="m-mode"><option value="proportionnel">Prorata</option><option value="par_palier">Palier</option><option value="par_couvert">Par couvert</option></select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><input class="cap" type="number" min="1" placeholder="/N pers" value="${cap!=null?esc(cap):""}"><button class="rm">×</button>`;
@@ -1131,9 +1136,45 @@ async function openRecetteEditor(id){
     const allergenes_libre=$("reAllergLibre").value.trim()||null;
     const body={nom,description:$("reDesc").value.trim()||null,portion_base:Number($("reBase").value)||10,allergenes,allergenes_libre,ingredients,materiels};
     const btn=$("reSave");btn.classList.add("loading");btn.disabled=true;
-    try{await api(id?`/api/recettes/${id}`:"/api/recettes",{method:id?"PUT":"POST",body});closeModal();toast(id?"Recette enregistrée.":"Recette créée.");renderRecettes();}
+    try{await api(id?`/api/recettes/${id}`:"/api/recettes",{method:id?"PUT":"POST",body});if(rePhotoCommit){try{await rePhotoCommit();}catch(_){}}closeModal();toast(id?"Recette enregistrée.":"Recette créée.");renderRecettes();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
+}
+
+/* ---------- PERSONNEL ---------- */
+async function renderPersonnel(){
+  $("content").innerHTML=`<div class="head"><h2>Personnel</h2><div class="tools">${canOps()?`<button class="btn sm" id="newPers">+ Personne</button>`:`<span class="ro-note">consultation seule</span>`}</div></div><div id="persBox"><div class="state">Chargement…</div></div>`;
+  if(canOps())$("newPers").addEventListener("click",()=>personnelModal(null));
+  try{
+    const list=await api("/api/personnel");
+    if(!list.length){$("persBox").innerHTML=`<div class="state"><b>Aucune personne</b>${canOps()?"Ajoutez la première avec « + Personne ».":"L'annuaire est vide."}</div>`;return;}
+    $("persBox").innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px">${list.map(p=>`<div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;gap:14px;align-items:center">${p.photo?`<img src="${p.photo}" style="width:64px;height:64px;object-fit:cover;border-radius:50%;border:1px solid var(--line)">`:`<div style="width:64px;height:64px;border-radius:50%;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:22px">👤</div>`}<div style="flex:1;min-width:0"><div style="font-weight:600">${esc(p.nom)}</div><div class="ro-note">${esc(FONCTION_LABEL[p.fonction]||p.fonction||"—")}</div>${p.tel?`<div class="ro-note">☎ <a href="tel:${esc(p.tel)}" style="color:var(--bottle-2)">${esc(p.tel)}</a></div>`:""}</div>${canOps()?`<button class="btn ghost sm" data-pedit="${p.id}">Modifier</button>`:""}</div>`).join("")}</div>`;
+    if(canOps())$("persBox").querySelectorAll("[data-pedit]").forEach(b=>b.addEventListener("click",()=>{const p=list.find(x=>String(x.id)===b.dataset.pedit);personnelModal(p);}));
+  }catch(e){$("persBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;}
+}
+function personnelModal(p){
+  const edit=p&&p.id;
+  openModal(`<div class="modal-head"><div><h3>${edit?esc(p.nom):"Nouvelle personne"}</h3><div class="meta">Personnel</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom</label><input id="peNom" placeholder="Prénom Nom" value="${edit?esc(p.nom):""}"></div>
+      <div class="field"><label>Fonction</label><select id="peFonc">${FONCTIONS.map(([k,l])=>`<option value="${k}"${edit&&p.fonction===k?" selected":""}>${l}</option>`).join("")}</select></div>
+      <div class="field"><label>Téléphone</label><input id="peTel" placeholder="06…" value="${edit&&p.tel?esc(p.tel):""}"></div>
+      ${edit?`<div class="field"><label>Photo</label><div id="pePhoto"></div></div>`:`<p style="font-size:12.5px;color:var(--ink-soft);margin:4px 0 10px">La photo pourra être ajoutée après la création, via « Modifier ».</p>`}
+      <button class="btn full" id="peSave"><span class="spin"></span><span class="label">${edit?"Enregistrer":"Créer la personne"}</span></button>
+      ${edit?`<button class="btn danger sm full" id="peDel" style="margin-top:8px">Supprimer cette personne</button>`:""}
+      <div class="msg err" id="peMsg"></div></div>`);
+  const pePhotoCommit=edit?mountPhoto("pePhoto",`/api/personnel/${p.id}/photo`):null;
+  $("peSave").addEventListener("click",async()=>{
+    const m=$("peMsg");m.classList.remove("show");
+    const nom=$("peNom").value.trim();if(!nom){m.textContent="Nom requis.";m.classList.add("show");return;}
+    const body={nom,fonction:$("peFonc").value,tel:$("peTel").value.trim()||null};
+    const btn=$("peSave");btn.classList.add("loading");btn.disabled=true;
+    try{if(edit){await api(`/api/personnel/${p.id}`,{method:"PUT",body});}else{await api("/api/personnel",{method:"POST",body});}
+      if(pePhotoCommit){try{await pePhotoCommit();}catch(_){}}
+      closeModal();toast(edit?"Personne mise à jour.":"Personne créée.");renderPersonnel();}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+  if(edit&&$("peDel"))$("peDel").addEventListener("click",async()=>{if(!confirm("Supprimer cette personne ?"))return;try{await api(`/api/personnel/${p.id}`,{method:"DELETE"});closeModal();toast("Personne supprimée.");renderPersonnel();}catch(e){toast(e.message,true);}});
 }
 
 /* ---------- ADMINISTRATION ---------- */
