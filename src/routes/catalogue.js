@@ -79,4 +79,53 @@ router.get('/alertes', ah(async (_req, res) => {
   res.json(rows);
 }));
 
+// ---------- INVENTAIRE (comptage physique du stock réel) ----------
+// Valider un comptage : applique les quantités réelles comme nouveau stock + journalise les écarts
+router.post('/inventaire/valider', requireMaterielEditor, ah(async (req, res) => {
+  const items = Array.isArray(req.body && req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: 'Aucun comptage fourni' });
+  const par = req.user.nom || null;
+  const cx = await pool.connect();
+  const ajustements = [];
+  try {
+    await cx.query('BEGIN');
+    for (const it of items) {
+      const reel = Number(it.reel);
+      if (!(reel >= 0)) continue;
+      const id = parseInt(it.id, 10);
+      if (Number.isNaN(id)) continue;
+      if (it.type === 'boisson') {
+        const { rows } = await cx.query('SELECT nom, unite, stock FROM boissons WHERE id = $1', [id]);
+        if (!rows[0]) continue;
+        const theo = Number(rows[0].stock) || 0;
+        await cx.query('UPDATE boissons SET stock = $1 WHERE id = $2', [reel, id]);
+        await cx.query('INSERT INTO inventaire_log (type, ref_id, nom, theorique, reel, ecart, fait_par) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+          ['boisson', id, rows[0].nom, theo, reel, reel - theo, par]);
+        ajustements.push({ type: 'boisson', nom: rows[0].nom, theorique: theo, reel, ecart: reel - theo });
+      } else {
+        const { rows } = await cx.query(
+          'SELECT m.nom, COALESCE(inv.quantite_stock,0) AS stock FROM materiels m LEFT JOIN inventaire inv ON inv.materiel_id = m.id WHERE m.id = $1', [id]);
+        if (!rows[0]) continue;
+        const theo = Number(rows[0].stock) || 0;
+        await cx.query(
+          `INSERT INTO inventaire (materiel_id, quantite_stock, seuil_alerte) VALUES ($1, $2, 0)
+           ON CONFLICT (materiel_id) DO UPDATE SET quantite_stock = EXCLUDED.quantite_stock`, [id, reel]);
+        await cx.query('INSERT INTO inventaire_log (type, ref_id, nom, theorique, reel, ecart, fait_par) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+          ['materiel', id, rows[0].nom, theo, reel, reel - theo, par]);
+        ajustements.push({ type: 'materiel', nom: rows[0].nom, theorique: theo, reel, ecart: reel - theo });
+      }
+    }
+    await cx.query('COMMIT');
+  } catch (e) { await cx.query('ROLLBACK'); throw e; } finally { cx.release(); }
+  res.json({ count: ajustements.length, ajustements });
+}));
+
+// Historique des comptages
+router.get('/inventaire/historique', ah(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 30, 200);
+  const { rows } = await pool.query(
+    'SELECT type, nom, theorique, reel, ecart, fait_par, fait_le FROM inventaire_log ORDER BY fait_le DESC LIMIT $1', [limit]);
+  res.json(rows);
+}));
+
 module.exports = router;

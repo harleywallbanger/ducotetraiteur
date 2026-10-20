@@ -243,6 +243,7 @@ const TABS=[
   {id:"clients",label:"Clients",roles:["admin","manager","maitre_hotel","serveur"]},
   {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
   {id:"appros",label:"Appros",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
+  {id:"inventaire",label:"Inventaire",roles:["admin","manager","preparateur","maitre_hotel","serveur"]},
   {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
   {id:"personnel",label:"Personnel",roles:["admin","manager","maitre_hotel","serveur"]},
   {id:"admin",label:"Administration",roles:["admin","manager"]},
@@ -343,7 +344,57 @@ function renderNotifBar(changed){
 $("tabs").addEventListener("click",(e)=>{const b=e.target.closest("button[data-view]");if(b)switchView(b.dataset.view);});
 function switchView(view){
   [...$("tabs").children].forEach(b=>b.classList.toggle("active",b.dataset.view===view));
-  ({commandes:renderCommandes,calendrier:renderCalendrier,clients:renderClients,stock:renderStock,appros:renderAppros,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+  ({commandes:renderCommandes,calendrier:renderCalendrier,clients:renderClients,stock:renderStock,appros:renderAppros,inventaire:renderInventaire,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+}
+
+/* ---------- INVENTAIRE (comptage du stock réel) ---------- */
+async function renderInventaire(){
+  $("content").innerHTML=`<div class="head"><h2>Inventaire — stock réel</h2></div>
+    <div class="ro-note" style="margin-bottom:10px">Saisis la quantité <b>comptée</b> sur le terrain. L'écart avec le théorique s'affiche en direct. « Enregistrer » applique le réel comme nouveau stock et journalise les écarts.</div>
+    <div id="invBox"><div class="state">Chargement…</div></div>`;
+  let mats=[],bois=[];
+  try{[mats,bois]=await Promise.all([api("/api/materiels"),api("/api/boissons")]);}
+  catch(e){$("invBox").innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;return;}
+  const row=(type,id,nom,unite,theo)=>`<tr data-irow><td>${esc(nom)}</td><td class="num">${fmtN(theo)} ${esc(unite||"")}</td><td class="num"><input class="qedit icount" type="number" min="0" step="any" style="width:90px" data-type="${type}" data-id="${id}" data-theo="${theo}" placeholder="—"></td><td class="num iecart">—</td></tr>`;
+  const matRows=mats.map(m=>row("materiel",m.id,m.nom,m.unite,Number(m.quantite_stock)||0)).join("")||`<tr><td colspan="4">Aucun matériel</td></tr>`;
+  const boisRows=bois.map(b=>row("boisson",b.id,b.nom,b.unite,Number(b.stock)||0)).join("")||`<tr><td colspan="4">Aucune boisson</td></tr>`;
+  $("invBox").innerHTML=`
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn sm" id="invSave"><span class="spin"></span><span class="label">Enregistrer l'inventaire</span></button>
+      <span id="invCount" class="ro-note">0 ligne(s) comptée(s)</span>
+    </div>
+    <h3 style="margin:8px 0 6px">🧰 Matériel</h3>
+    <table class="grid"><thead><tr><th>Article</th><th class="num">Théorique</th><th class="num">Compté</th><th class="num">Écart</th></tr></thead><tbody>${matRows}</tbody></table>
+    <h3 style="margin:22px 0 6px">🥤 Boissons</h3>
+    <table class="grid"><thead><tr><th>Article</th><th class="num">Théorique</th><th class="num">Compté</th><th class="num">Écart</th></tr></thead><tbody>${boisRows}</tbody></table>
+    <h3 style="margin:26px 0 6px">Historique des comptages</h3>
+    <div id="invHist"><div class="state" style="padding:6px 0">Chargement…</div></div>`;
+  const recompute=()=>{
+    let n=0;
+    $("invBox").querySelectorAll("input.icount").forEach(inp=>{
+      const cell=inp.closest("tr").querySelector(".iecart");const v=inp.value.trim();
+      if(v===""){cell.textContent="—";cell.style.color="";cell.style.fontWeight="";return;}
+      n++;const ec=Number(v)-Number(inp.dataset.theo);
+      cell.textContent=(ec>0?"+":"")+fmtN(ec);cell.style.color=ec===0?"var(--ink-soft)":(ec<0?"#b23b3b":"#1f7a5a");cell.style.fontWeight="700";
+    });
+    $("invCount").textContent=n+" ligne(s) comptée(s)";
+  };
+  $("invBox").querySelectorAll("input.icount").forEach(inp=>inp.addEventListener("input",recompute));
+  $("invSave").addEventListener("click",async()=>{
+    const items=[];
+    $("invBox").querySelectorAll("input.icount").forEach(inp=>{const v=inp.value.trim();if(v!==""&&Number(v)>=0)items.push({type:inp.dataset.type,id:inp.dataset.id,reel:Number(v)});});
+    if(!items.length){toast("Saisis au moins une quantité comptée.",true);return;}
+    const btn=$("invSave");btn.classList.add("loading");btn.disabled=true;
+    try{const r=await api("/api/inventaire/valider",{method:"POST",body:{items}});toast(`Inventaire enregistré : ${r.count} ajustement(s).`);renderInventaire();}
+    catch(e){toast(e.message,true);btn.classList.remove("loading");btn.disabled=false;}
+  });
+  loadInvHist();
+}
+async function loadInvHist(){
+  const box=$("invHist");if(!box)return;
+  let hist=[];try{hist=await api("/api/inventaire/historique?limit=25");}catch(_){box.innerHTML=`<div class="state" style="padding:6px 0">Historique indisponible.</div>`;return;}
+  if(!hist.length){box.innerHTML=`<div class="state" style="padding:6px 0">Aucun comptage enregistré.</div>`;return;}
+  box.innerHTML=`<table class="grid"><thead><tr><th>Date</th><th>Article</th><th class="num">Théo.</th><th class="num">Réel</th><th class="num">Écart</th><th>Par</th></tr></thead><tbody>${hist.map(h=>{const dt=h.fait_le?new Date(h.fait_le).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"";const ec=Number(h.ecart);return `<tr><td>${esc(dt)}</td><td>${esc(h.nom)} <span class="ro-note">(${h.type==="boisson"?"boisson":"matériel"})</span></td><td class="num">${fmtN(h.theorique)}</td><td class="num">${fmtN(h.reel)}</td><td class="num" style="color:${ec===0?"var(--ink-soft)":(ec<0?"#b23b3b":"#1f7a5a")};font-weight:600">${ec>0?"+":""}${fmtN(ec)}</td><td>${esc(h.fait_par||"—")}</td></tr>`;}).join("")}</tbody></table>`;
 }
 
 /* ---------- APPROS (anticipation) ---------- */
