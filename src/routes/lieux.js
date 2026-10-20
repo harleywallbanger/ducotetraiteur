@@ -19,7 +19,9 @@ const clean = v => (v != null && String(v).trim() !== '') ? String(v).trim() : n
 
 router.get('/fiches', ah(async (_req, res) => {
   const { rows } = await pool.query(
-    'SELECT id, nom, adresse, description, photo, contact_nom, contact_tel FROM lieux ORDER BY nom');
+    `SELECT l.id, l.nom, l.adresse, l.description, l.photo, l.contact_nom, l.contact_tel,
+            (SELECT COUNT(*) FROM lieu_photos lp WHERE lp.lieu_id = l.id) AS nb_photos
+       FROM lieux l ORDER BY l.nom`);
   res.json(rows);
 }));
 
@@ -65,6 +67,28 @@ router.put('/fiches/:id/photo', requireMaterielEditor, ah(async (req, res) => {
   const { rows } = await pool.query('UPDATE lieux SET photo=$1 WHERE id=$2 RETURNING id', [photo || null, req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Lieu introuvable' });
   res.json({ ok: true });
+}));
+
+// Galerie : plusieurs photos par lieu
+router.get('/fiches/:id/photos', ah(async (req, res) => {
+  const { rows } = await pool.query('SELECT id, photo FROM lieu_photos WHERE lieu_id=$1 ORDER BY position, id', [req.params.id]);
+  res.json(rows);
+}));
+router.post('/fiches/:id/photos', requireMaterielEditor, ah(async (req, res) => {
+  const photo = req.body && req.body.photo;
+  if (typeof photo !== 'string' || !PHOTO_RE.test(photo) || photo.length > MAX_PHOTO)
+    return res.status(400).json({ error: 'Image invalide (png/jpeg/webp, 3 Mo max)' });
+  const { rows: l } = await pool.query('SELECT id FROM lieux WHERE id=$1', [req.params.id]);
+  if (!l[0]) return res.status(404).json({ error: 'Lieu introuvable' });
+  const { rows } = await pool.query(
+    'INSERT INTO lieu_photos (lieu_id, photo, position) VALUES ($1,$2,COALESCE((SELECT MAX(position)+1 FROM lieu_photos WHERE lieu_id=$1),0)) RETURNING id',
+    [req.params.id, photo]);
+  res.status(201).json(rows[0]);
+}));
+router.delete('/fiches/:id/photos/:pid', requireMaterielEditor, ah(async (req, res) => {
+  const { rowCount } = await pool.query('DELETE FROM lieu_photos WHERE id=$1 AND lieu_id=$2', [req.params.pid, req.params.id]);
+  if (!rowCount) return res.status(404).json({ error: 'Photo introuvable' });
+  res.status(204).end();
 }));
 
 module.exports = router;

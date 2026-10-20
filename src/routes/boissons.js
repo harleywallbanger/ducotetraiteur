@@ -406,13 +406,14 @@ router.put('/commandes/:id/horaires', requireMaterielEditor, ah(async (req, res)
   const clean = (v) => (v != null && String(v).trim() !== '') ? String(v).trim() : null;
   const { rows } = await pool.query(
     `UPDATE commandes SET
-        heure_depart_marchandise = $1,
-        heure_depart_cuisinier   = $2,
-        heure_arrivee_serveurs   = $3,
-        heure_retour             = $4,
-        modifie_par              = $5
-      WHERE id = $6 RETURNING id`,
-    [clean(b.heure_depart_marchandise), clean(b.heure_depart_cuisinier), clean(b.heure_arrivee_serveurs), clean(b.heure_retour), req.user.nom || null, req.params.id]);
+        heure_debut              = $1,
+        heure_depart_marchandise = $2,
+        heure_depart_cuisinier   = $3,
+        heure_arrivee_serveurs   = $4,
+        heure_retour             = $5,
+        modifie_par              = $6
+      WHERE id = $7 RETURNING id`,
+    [clean(b.heure_debut), clean(b.heure_depart_marchandise), clean(b.heure_depart_cuisinier), clean(b.heure_arrivee_serveurs), clean(b.heure_retour), req.user.nom || null, req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable' });
   res.json({ ok: true });
 }));
