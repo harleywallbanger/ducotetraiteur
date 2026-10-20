@@ -78,6 +78,7 @@ const { pool: _migPool } = require('./db');
       "ALTER TABLE camions ADD COLUMN IF NOT EXISTS immatriculation TEXT",
       "ALTER TABLE camions ADD COLUMN IF NOT EXISTS loue BOOLEAN DEFAULT false",
       "ALTER TABLE camions ADD COLUMN IF NOT EXISTS loueur TEXT",
+      "CREATE TABLE IF NOT EXISTS commande_jalons (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, jalon TEXT NOT NULL, fait BOOLEAN DEFAULT false, fait_le TIMESTAMPTZ, fait_par TEXT, PRIMARY KEY (commande_id, jalon))",
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_hayon BOOLEAN DEFAULT false",
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS necessite_frigo BOOLEAN DEFAULT false",
       "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS camion_id INTEGER REFERENCES camions(id) ON DELETE SET NULL",

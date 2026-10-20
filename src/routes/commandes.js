@@ -14,7 +14,8 @@ router.get('/', ah(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT c.id, c.client, c.date_event, c.couverts, c.notes,
             COALESCE(s.statut, 'ok') AS statut,
-            (SELECT COALESCE(SUM(nb_personnes), 0) FROM commande_recettes cr WHERE cr.commande_id = c.id) AS total_couverts
+            (SELECT COALESCE(SUM(nb_personnes), 0) FROM commande_recettes cr WHERE cr.commande_id = c.id) AS total_couverts,
+            (SELECT COUNT(*) FROM commande_jalons cj WHERE cj.commande_id = c.id AND cj.fait) AS jalons_faits
        FROM commandes c
        LEFT JOIN commande_statut s ON s.commande_id = c.id
        ${where}

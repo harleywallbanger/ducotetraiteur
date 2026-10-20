@@ -369,7 +369,7 @@ async function renderCalendrier(){
   for(let i=0;i<lead;i++)cells+=`<div></div>`;
   for(let day=1;day<=ndays;day++){
     const ds=`${y}-${p(m+1)}-${p(day)}`,evs=byDay[ds]||[],isToday=ds===todayStr;
-    const items=evs.map(c=>{const cv=c.total_couverts||c.couverts;return `<button class="cal-ev" data-cid="${c.id}" title="${esc(c.client||"Sans client")}${cv?` · ${cv} couverts`:""}" style="text-align:left;border:1px solid var(--line);background:rgba(31,122,90,.08);border-radius:7px;padding:3px 6px;font-size:11.5px;line-height:1.25;cursor:pointer;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.client||"Sans client")}${cv?` · ${cv}c`:""}</button>`;}).join("");
+    const items=evs.map(c=>{const cv=c.total_couverts||c.couverts;const jf=Number(c.jalons_faits)||0;const dot=jf>=4?"#1f7a5a":(jf>0?"#c8a24b":"#c9c2b4");return `<button class="cal-ev" data-cid="${c.id}" title="${esc(c.client||"Sans client")}${cv?` · ${cv} couverts`:""} · jour J ${jf}/4" style="text-align:left;border:1px solid var(--line);background:rgba(31,122,90,.08);border-radius:7px;padding:3px 6px;font-size:11.5px;line-height:1.25;cursor:pointer;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dot};margin-right:4px;vertical-align:middle"></span>${esc(c.client||"Sans client")}${cv?` · ${cv}c`:""}</button>`;}).join("");
     cells+=`<div style="${cellBase}${isToday?";background:rgba(200,162,75,.12);border-color:#c8a24b":""}"><div style="font-size:12px;font-weight:700;color:${isToday?"#b4862f":"var(--ink-soft)"}">${day}</div>${items}</div>`;
   }
   $("calBox").innerHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px">${dow.map(d=>`<div style="text-align:center;font-size:12px;color:var(--ink-soft);font-weight:600">${d}</div>`).join("")}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:stretch">${cells}</div>${list.length?"":`<div class="state" style="margin-top:14px">Aucune commande ce mois-ci.</div>`}`;
@@ -452,6 +452,7 @@ async function openCommande(id){
     try{c.materiel_sortie=await api(`/api/commandes/${id}/materiel-sortie`);}catch(_){c.materiel_sortie=[];}
     try{c.materiel_location=await api(`/api/commandes/${id}/materiel-location`);}catch(_){c.materiel_location=[];}
     try{c.transport=await api(`/api/commandes/${id}/transport`);}catch(_){c.transport=null;}
+    try{c.jalons=await api(`/api/commandes/${id}/jalons`);}catch(_){c.jalons=[];}
     renderCommandeDetail(c);
     markSeen(c.id,c.modifie_le);checkNotifications();
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
@@ -794,6 +795,17 @@ function openBilanEditor(c,onDone){
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
 }
+const JALON_DEFS=[["cuisine","🍳","Cuisine prête"],["materiel","📦","Matériel préparé"],["camion","🚛","Camion chargé"],["parti","✅","Parti / livré"]];
+function jalonsBox(c){
+  const by={};(c.jalons||[]).forEach(j=>by[j.jalon]=j);
+  const faits=JALON_DEFS.filter(d=>by[d[0]]&&by[d[0]].fait).length;
+  const cells=JALON_DEFS.map(d=>{const j=by[d[0]]||{};const done=!!j.fait;
+    const when=done&&j.fait_le?new Date(j.fait_le).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
+    const who=done&&j.fait_par?esc(j.fait_par):"";
+    return `<button class="jalon" data-jalon="${d[0]}" data-fait="${done?1:0}" style="flex:1;min-width:116px;text-align:left;border:1px solid ${done?"#1f7a5a":"var(--line)"};background:${done?"rgba(31,122,90,.12)":"#fff"};border-radius:10px;padding:9px 11px;cursor:pointer;color:inherit"><div style="font-size:17px">${d[1]}${done?" ✔":""}</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${d[2]}</div><div style="font-size:11px;color:var(--ink-soft);margin-top:2px">${done?(esc(when)+(who?` · ${who}`:"")):"à faire"}</div></button>`;}).join("");
+  return `<h4 style="margin-top:4px">Suivi du jour J <span class="pill">${faits}/4</span></h4><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">${cells}</div>`;
+}
+async function toggleJalon(c,jalon,fait){try{await api(`/api/commandes/${c.id}/jalons/${jalon}`,{method:"PUT",body:{fait}});openCommande(c.id);}catch(e){toast(e.message,true);}}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -840,6 +852,7 @@ function renderCommandeDetail(c){
       ${clientBox}
       ${ficheBox}
       ${allergBox}
+      ${jalonsBox(c)}
       <h4>Recettes</h4>
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Personnes</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
@@ -875,6 +888,7 @@ function renderCommandeDetail(c){
   if($("btnLocation"))$("btnLocation").addEventListener("click",()=>openLocationEditor(c,()=>openCommande(c.id)));
   if($("btnTransport"))$("btnTransport").addEventListener("click",()=>openTransportEditor(c,()=>openCommande(c.id)));
   if($("btnBilan"))$("btnBilan").addEventListener("click",()=>openBilanEditor(c,()=>openCommande(c.id)));
+  $("modal").querySelectorAll("[data-jalon]").forEach(b=>b.addEventListener("click",()=>toggleJalon(c,b.dataset.jalon,b.dataset.fait!=="1")));
   wireSortie(c,()=>openCommande(c.id));
 }
 

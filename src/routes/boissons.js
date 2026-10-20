@@ -503,4 +503,29 @@ router.put('/commandes/:id/bilan', requireMaterielEditor, ah(async (req, res) =>
   res.json({ ok: true });
 }));
 
+/* ---- Suivi du jour J : jalons (cuisine / matériel / camion / parti) ---- */
+const JALONS = ['cuisine', 'materiel', 'camion', 'parti'];
+router.get('/commandes/:id/jalons', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT jalon, fait, fait_le, fait_par FROM commande_jalons WHERE commande_id = $1', [req.params.id]);
+  const map = {};
+  rows.forEach(r => { map[r.jalon] = r; });
+  res.json(JALONS.map(j => map[j] || { jalon: j, fait: false, fait_le: null, fait_par: null }));
+}));
+router.put('/commandes/:id/jalons/:jalon', ah(async (req, res) => {
+  const jalon = String(req.params.jalon || '');
+  if (!JALONS.includes(jalon)) return res.status(400).json({ error: 'Jalon inconnu' });
+  const fait = !!(req.body && req.body.fait);
+  const { rows } = await pool.query(
+    `INSERT INTO commande_jalons (commande_id, jalon, fait, fait_le, fait_par)
+       VALUES ($1, $2, $3, CASE WHEN $3 THEN now() ELSE NULL END, CASE WHEN $3 THEN $4 ELSE NULL END)
+     ON CONFLICT (commande_id, jalon) DO UPDATE SET
+       fait = EXCLUDED.fait,
+       fait_le = CASE WHEN EXCLUDED.fait THEN now() ELSE NULL END,
+       fait_par = CASE WHEN EXCLUDED.fait THEN $4 ELSE NULL END
+     RETURNING jalon, fait, fait_le, fait_par`,
+    [req.params.id, jalon, fait, req.user.nom || null]);
+  res.json(rows[0]);
+}));
+
 module.exports = router;
