@@ -91,4 +91,24 @@ router.delete('/fiches/:id/photos/:pid', requireMaterielEditor, ah(async (req, r
   res.status(204).end();
 }));
 
+// Matériels présents / couverts sur place (ce lieu les rend inutiles → non envoyés)
+router.get('/fiches/:id/sur-place', ah(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT sp.materiel_id, m.nom FROM lieu_sur_place sp JOIN materiels m ON m.id = sp.materiel_id
+      WHERE sp.lieu_id = $1 ORDER BY m.nom`, [req.params.id]);
+  res.json(rows);
+}));
+router.put('/fiches/:id/sur-place', requireMaterielEditor, ah(async (req, res) => {
+  const ids = Array.isArray(req.body && req.body.materiel_ids) ? req.body.materiel_ids.map(x => parseInt(x, 10)).filter(x => !Number.isNaN(x)) : [];
+  const cx = await pool.connect();
+  try {
+    await cx.query('BEGIN');
+    await cx.query('DELETE FROM lieu_sur_place WHERE lieu_id = $1', [req.params.id]);
+    for (const mid of ids)
+      await cx.query('INSERT INTO lieu_sur_place (lieu_id, materiel_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, mid]);
+    await cx.query('COMMIT');
+  } catch (e) { await cx.query('ROLLBACK'); throw e; } finally { cx.release(); }
+  res.json({ ok: true });
+}));
+
 module.exports = router;

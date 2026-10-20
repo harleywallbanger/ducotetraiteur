@@ -370,7 +370,7 @@ async function renderLieux(){
       ${l.photo?`<img src="${l.photo}" style="width:100%;height:150px;object-fit:cover">`:`<div style="height:150px;background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:28px">🏛</div>`}
       <div style="padding:14px;display:flex;flex-direction:column;gap:5px;flex:1">
         <div style="font-weight:700;font-size:15px">${esc(l.nom)}</div>
-        ${Number(l.nb_photos)>0?`<div><span class="pill">📷 ${l.nb_photos} photo${Number(l.nb_photos)>1?"s":""}</span></div>`:""}
+        ${Number(l.nb_photos)>0?`<div><button class="btn ghost sm" data-lview="${l.id}">📷 Voir ${l.nb_photos} photo${Number(l.nb_photos)>1?"s":""}</button></div>`:""}
         ${l.adresse?`<div class="ro-note">📍 ${esc(l.adresse)}</div>`:""}
         ${l.description?`<div style="font-size:13px;color:var(--ink-soft);line-height:1.4">${esc(l.description)}</div>`:""}
         ${biere?`<div><span class="pill">🍺 Tireuse à bière sur place</span></div>`:""}
@@ -378,6 +378,13 @@ async function renderLieux(){
         ${can?`<div style="margin-top:6px"><button class="btn ghost sm" data-ledit="${l.id}">Modifier</button></div>`:""}
       </div></div>`;}).join("")}</div>`;
   if(can)$("lieuxBox").querySelectorAll("[data-ledit]").forEach(b=>b.addEventListener("click",()=>{const l=list.find(x=>String(x.id)===b.dataset.ledit);lieuModal(l);}));
+  $("lieuxBox").querySelectorAll("[data-lview]").forEach(b=>b.addEventListener("click",()=>{const l=list.find(x=>String(x.id)===b.dataset.lview);openLieuPhotos(l);}));
+}
+async function openLieuPhotos(l){
+  openModal(`<div class="modal-head"><div><h3>${esc(l.nom)}</h3><div class="meta">Photos du lieu</div></div><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body"><div id="lpBox"><div class="state">Chargement…</div></div></div>`);
+  let ph=[];try{ph=await api(`/api/lieux/fiches/${l.id}/photos`);}catch(_){ph=[];}
+  const all=[];if(l.photo)all.push(l.photo);ph.forEach(p=>all.push(p.photo));
+  $("lpBox").innerHTML=all.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">${all.map(src=>`<img src="${src}" style="width:100%;height:150px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">`).join("")}</div>`:`<div class="state">Aucune photo.</div>`;
 }
 function lieuModal(l){
   const edit=!!(l&&l.id);
@@ -388,7 +395,8 @@ function lieuModal(l){
       <div class="field"><label>Description</label><textarea id="luDesc" placeholder="Accès, équipements sur place (ex. « tireuse à bière »), particularités…">${edit?esc(l.description||""):""}</textarea><div class="ro-note" style="margin-top:4px">💡 Si tu écris « tireuse à bière », elle sera automatiquement retirée des besoins des prestations à ce lieu.</div></div>
       <div class="field" style="display:flex;gap:8px"><div style="flex:2"><label>Contact sur place</label><input id="luCNom" placeholder="Nom" value="${edit?esc(l.contact_nom||""):""}"></div><div style="flex:1"><label>Tél.</label><input id="luCTel" placeholder="Téléphone" value="${edit?esc(l.contact_tel||""):""}"></div></div>
       ${edit?`<div class="field"><label>Photo principale</label><div id="luPhoto"></div></div>
-      <div class="field"><label>Autres photos</label><div id="luGallery"><div class="ro-note">Chargement…</div></div><label class="btn ghost sm" style="cursor:pointer;margin-top:6px;display:inline-block">+ Ajouter des photos<input type="file" id="luGalIn" accept="image/*" multiple style="display:none"></label></div>`:`<div class="ro-note">Enregistre d'abord le lieu pour ajouter des photos.</div>`}
+      <div class="field"><label>Autres photos</label><div id="luGallery"><div class="ro-note">Chargement…</div></div><label class="btn ghost sm" style="cursor:pointer;margin-top:6px;display:inline-block">+ Ajouter des photos<input type="file" id="luGalIn" accept="image/*" multiple style="display:none"></label></div>
+      <div class="field"><label>Matériels présents / couverts sur place</label><div class="ro-note" style="margin-bottom:6px">Coche ce que ce lieu fournit déjà (four, tireuse, lave-vaisselle…). Ces matériels seront <b>retirés des besoins</b> des prestations à ce lieu.</div><div id="luSurPlace"><div class="ro-note">Chargement…</div></div></div>`:`<div class="ro-note">Enregistre d'abord le lieu pour les photos et les matériels sur place.</div>`}
       <button class="btn full" id="luSave"><span class="spin"></span><span class="label">${edit?"Enregistrer":"Créer le lieu"}</span></button>
       ${edit?`<button class="btn danger sm full" id="luDel" style="margin-top:8px">Supprimer ce lieu</button>`:""}
       <div class="msg err" id="luMsg"></div></div>`);
@@ -399,13 +407,14 @@ function lieuModal(l){
       box.querySelectorAll("[data-delph]").forEach(b=>b.addEventListener("click",async()=>{try{await api(`/api/lieux/fiches/${l.id}/photos/${b.dataset.delph}`,{method:"DELETE"});loadGal();}catch(e){toast(e.message,true);}}));};
     loadGal();
     const inp=$("luGalIn");if(inp)inp.onchange=async e=>{const files=[...(e.target.files||[])];const box=$("luGallery");if(box)box.innerHTML=`<div class="ro-note">Ajout…</div>`;for(const f of files){try{const data=await resizePhoto(f);await api(`/api/lieux/fiches/${l.id}/photos`,{method:"POST",body:{photo:data}});}catch(_){toast("Image illisible.",true);}}e.target.value="";loadGal();};
+    (async()=>{let mats=[],cur=[];try{[mats,cur]=await Promise.all([api("/api/materiels"),api(`/api/lieux/fiches/${l.id}/sur-place`)]);}catch(_){}const sel=new Set(cur.map(x=>Number(x.materiel_id)));const box=$("luSurPlace");if(!box)return;box.innerHTML=mats.length?`<div style="display:flex;flex-wrap:wrap;gap:6px 14px;max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:9px;padding:8px">${mats.map(m=>`<label class="check" style="font-size:13px"><input type="checkbox" class="sp" value="${m.id}"${sel.has(Number(m.id))?" checked":""}><span>${esc(m.nom)}</span></label>`).join("")}</div>`:`<div class="ro-note">Aucun matériel au catalogue.</div>`;})();
   }
   $("luSave").addEventListener("click",async()=>{
     const m=$("luMsg");m.classList.remove("show");
     const nom=$("luNom").value.trim();if(!nom){m.textContent="Nom requis.";m.classList.add("show");return;}
     const body={nom,adresse:$("luAdr").value.trim(),description:$("luDesc").value.trim(),contact_nom:$("luCNom").value.trim(),contact_tel:$("luCTel").value.trim()};
     const btn=$("luSave");btn.classList.add("loading");btn.disabled=true;
-    try{await api(edit?`/api/lieux/fiches/${l.id}`:"/api/lieux/fiches",{method:edit?"PUT":"POST",body});if(luPhotoCommit){try{await luPhotoCommit();}catch(_){}}closeModal();toast(edit?"Lieu mis à jour.":"Lieu créé.");renderLieux();}
+    try{await api(edit?`/api/lieux/fiches/${l.id}`:"/api/lieux/fiches",{method:edit?"PUT":"POST",body});if(luPhotoCommit){try{await luPhotoCommit();}catch(_){}}if(edit){try{const ids=[...document.querySelectorAll("#luSurPlace .sp:checked")].map(c=>Number(c.value));await api(`/api/lieux/fiches/${l.id}/sur-place`,{method:"PUT",body:{materiel_ids:ids}});}catch(_){}}closeModal();toast(edit?"Lieu mis à jour.":"Lieu créé.");renderLieux();}
     catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
   });
   if(edit&&$("luDel"))$("luDel").addEventListener("click",async()=>{
@@ -1080,7 +1089,7 @@ function renderCommandeDetail(c){
       <h4>Recettes</h4>
       <table class="grid"><thead><tr><th>Recette</th><th class="num">Personnes</th></tr></thead><tbody>${lignes}</tbody></table>
       ${sections}
-      ${c.tireuse_lieu&&c.tireuse_lieu.present?`<div class="ro-note" style="margin:6px 0;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper)">🍺 <b>Tireuse à bière fournie par le lieu</b>${c.tireuse_lieu.exclus&&c.tireuse_lieu.exclus.length?` — retirée des besoins : ${c.tireuse_lieu.exclus.map(esc).join(", ")}`:" (pensez-y si besoin de la rajouter manuellement)"}.</div>`:""}
+      ${c.lieu_fourni&&c.lieu_fourni.present?`<div class="ro-note" style="margin:6px 0;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper)">🏟 <b>Déjà présent / couvert par le lieu</b> — retiré des besoins : ${c.lieu_fourni.exclus.map(esc).join(", ")}.</div>`:""}
       ${boissonsBox}
       ${materielExtraBox}
       ${materielLocationBox(c)}
@@ -1428,7 +1437,7 @@ async function openRecetteEditor(id){
   let ings=[],mats=[],rec=null;
   try{[ings,mats]=await Promise.all([api("/api/ingredients"),api("/api/materiels")]);if(id)rec=await api(`/api/recettes/${id}`);}
   catch(e){toast(e.message,true);return;}
-  const ingOpts=ings.map(i=>`<option value="${i.id}">${esc(i.nom)} (${esc(i.unite)})</option>`).join("");
+  const ingOptHtml=()=>ings.map(i=>`<option value="${i.id}">${esc(i.nom)} (${esc(i.unite)})</option>`).join("");
   const matOpts=mats.map(m=>`<option value="${m.id}">${esc(m.nom)} (${esc(m.unite)})</option>`).join("");
   openModal(`<div class="modal-head"><div><h3>${id?"Modifier la recette":"Nouvelle recette"}</h3></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
@@ -1438,7 +1447,9 @@ async function openRecetteEditor(id){
       <h4>Allergènes</h4>
       <div id="reAllerg" style="display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px">${ALLERGENES.map(([k,l])=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;border:1px solid rgba(38,44,42,.18);border-radius:8px;padding:6px 10px;cursor:pointer;background:#fff"><input type="checkbox" value="${k}"> ${l}</label>`).join("")}</div>
       <div class="field"><label>Précisions allergènes (optionnel)</label><input id="reAllergLibre" placeholder="ex. traces de fruits à coque" value="${rec&&rec.allergenes_libre?esc(rec.allergenes_libre):""}"></div>
-      <h4>Ingrédients (cuisine)</h4><div id="reIng"></div><button class="btn ghost sm" id="reIngAdd" style="margin:4px 0 8px">+ Ingrédient</button>
+      <h4>Ingrédients (cuisine)</h4><div id="reIng"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 6px"><button class="btn ghost sm" id="reIngAdd">+ Ingrédient</button><button class="btn ghost sm" id="reIngNew">✛ Créer un ingrédient</button></div>
+      <div id="reIngNewForm" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><input id="riName" placeholder="Nom du nouvel ingrédient" style="flex:1;min-width:150px;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff"><input id="riUnite" placeholder="unité (g, L, pièce…)" style="width:140px;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff"><button class="btn sm" id="riCreate">Créer</button></div>
       <h4>Matériel</h4><div id="reMat"></div><button class="btn ghost sm" id="reMatAdd" style="margin:4px 0 14px">+ Matériel</button>
       ${id?`<div class="field"><label>Photo</label><div id="rePhoto"></div></div>`:""}
       <button class="btn full" id="reSave"><span class="spin"></span><span class="label">${id?"Enregistrer":"Créer la recette"}</span></button>
@@ -1446,12 +1457,22 @@ async function openRecetteEditor(id){
     </div>`);
   const rePhotoCommit=id?mountPhoto("rePhoto",`/api/recettes/${id}/photo`):null;
   const ingBox=$("reIng"),matBox=$("reMat");
-  function ingRow(sel,q){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${ingOpts}</select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><button class="rm">×</button>`;if(sel!=null)r.querySelector("select").value=sel;r.querySelector(".rm").addEventListener("click",()=>r.remove());ingBox.appendChild(r);}
+  function ingRow(sel,q){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select>${ingOptHtml()}</select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><button class="rm">×</button>`;if(sel!=null)r.querySelector("select").value=sel;r.querySelector(".rm").addEventListener("click",()=>r.remove());ingBox.appendChild(r);}
   function matRow(sel,mode,q,cap){const r=document.createElement("div");r.className="line-row";r.innerHTML=`<select class="m-art">${matOpts}</select><select class="m-mode"><option value="proportionnel">Prorata</option><option value="par_palier">Palier</option><option value="par_couvert">Par couvert</option></select><input class="qty" type="number" min="0" step="any" placeholder="qté" value="${q!=null?esc(q):""}"><input class="cap" type="number" min="1" placeholder="/N pers" value="${cap!=null?esc(cap):""}"><button class="rm">×</button>`;
     if(sel!=null)r.querySelector(".m-art").value=sel;const modeSel=r.querySelector(".m-mode"),capInp=r.querySelector(".cap"),qtyInp=r.querySelector(".qty");if(mode)modeSel.value=mode;const sync=()=>{capInp.style.display=modeSel.value==="par_palier"?"":"none";qtyInp.placeholder=modeSel.value==="par_couvert"?"qté/pers":"qté";};modeSel.addEventListener("change",sync);sync();r.querySelector(".rm").addEventListener("click",()=>r.remove());matBox.appendChild(r);}
   if(rec){(rec.ingredients||[]).forEach(i=>ingRow(i.ingredient_id,i.quantite));(rec.materiels||[]).forEach(m=>matRow(m.materiel_id,m.mode,m.quantite,m.capacite));}
   if(rec&&rec.allergenes){const set=new Set(allergKeys(rec.allergenes));$("reAllerg").querySelectorAll("input").forEach(c=>{if(set.has(c.value))c.checked=true;});}
   $("reIngAdd").addEventListener("click",()=>ingRow());$("reMatAdd").addEventListener("click",()=>matRow());
+  $("reIngNew").addEventListener("click",()=>{const f=$("reIngNewForm");f.style.display=f.style.display==="none"?"flex":"none";if(f.style.display==="flex")$("riName").focus();});
+  $("riCreate").addEventListener("click",async()=>{
+    const nom=$("riName").value.trim(),unite=$("riUnite").value.trim();
+    if(!nom||!unite){toast("Nom et unité requis.",true);return;}
+    const btn=$("riCreate");btn.disabled=true;
+    try{const ni=await api("/api/ingredients",{method:"POST",body:{nom,unite}});ings.push(ni);
+      ingBox.querySelectorAll("select").forEach(s=>{const o=document.createElement("option");o.value=ni.id;o.textContent=`${ni.nom} (${ni.unite})`;s.appendChild(o);});
+      ingRow(ni.id);$("riName").value="";$("riUnite").value="";$("riName").focus();toast("Ingrédient créé et ajouté.");}
+    catch(e){toast(e.message,true);}finally{btn.disabled=false;}
+  });
   $("reSave").addEventListener("click",async()=>{
     const m=$("reMsg");m.classList.remove("show");
     const nom=$("reNom").value.trim();if(!nom){m.textContent="Le nom est requis.";m.classList.add("show");return;}

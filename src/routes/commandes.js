@@ -45,25 +45,31 @@ router.get('/:id', ah(async (req, res) => {
   const { rows: st } = await pool.query(
     'SELECT statut FROM commande_statut WHERE commande_id = $1', [id]);
 
-  // Règle "tireuse à bière fournie par le lieu" : si le lieu a une tireuse à bière,
-  // on retire la tireuse des besoins — sauf si elle a été ajoutée/ajustée manuellement.
+  // Matériels fournis / couverts par le lieu → retirés des besoins (sauf ajout/ajustement manuel).
+  // Deux sources : la liste "sur place" du lieu, et la détection "tireuse à bière" dans la description.
   let lieuDesc = c[0].lieu_descriptif || '';
+  const surPlace = new Set();
   if (c[0].lieu_id) {
     const { rows: lr } = await pool.query('SELECT description FROM lieux WHERE id = $1', [c[0].lieu_id]);
     if (lr[0] && lr[0].description) lieuDesc += ' ' + lr[0].description;
+    const { rows: sp } = await pool.query('SELECT materiel_id FROM lieu_sur_place WHERE lieu_id = $1', [c[0].lieu_id]);
+    sp.forEach(r => surPlace.add(Number(r.materiel_id)));
   }
   const lieuHasTap = /tireuse/i.test(lieuDesc) && /bi[èe]re/i.test(lieuDesc);
-  let materielOut = materiel, tireuse_lieu = null;
-  if (lieuHasTap) {
+  let materielOut = materiel, lieu_fourni = null;
+  if (surPlace.size || lieuHasTap) {
     const exclus = [];
     materielOut = materiel.filter(m => {
-      if (/tireuse/i.test(m.materiel || '') && !m.ajuste && !m.extra) { exclus.push(m.materiel); return false; }
+      if (m.ajuste || m.extra) return true;
+      const bySurPlace = surPlace.has(Number(m.materiel_id));
+      const byTap = lieuHasTap && /tireuse/i.test(m.materiel || '');
+      if (bySurPlace || byTap) { exclus.push(m.materiel); return false; }
       return true;
     });
-    tireuse_lieu = { present: true, exclus };
+    if (exclus.length) lieu_fourni = { present: true, exclus };
   }
 
-  res.json({ ...c[0], statut: st[0]?.statut || 'ok', lignes, materiel: materielOut, cuisine, tireuse_lieu });
+  res.json({ ...c[0], statut: st[0]?.statut || 'ok', lignes, materiel: materielOut, cuisine, lieu_fourni });
 }));
 
 // Créer une commande
