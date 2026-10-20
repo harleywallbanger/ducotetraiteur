@@ -432,9 +432,15 @@ async function openClient(c){
         ${canOps()?`<button class="btn sm" id="cliNew" style="margin-bottom:16px">+ Nouvelle commande pour ce client</button>`:""}
         <h4>Commandes (${mine.length})</h4>
         <table class="grid"><thead><tr><th>Date</th><th class="num">Personnes</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+        ${(role()==="admin"||role()==="manager")?`<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)"><button class="btn danger sm" id="cliDel">Supprimer ce client</button><div class="ro-note" style="margin-top:6px">Supprime le client et ses ${mine.length} commande(s). Irréversible.</div></div>`:""}
       </div>`;
     $("modal").querySelectorAll("[data-cid]").forEach(b=>b.addEventListener("click",()=>openCommande(b.dataset.cid)));
     if($("cliNew"))$("cliNew").addEventListener("click",()=>openCommandeForm(null,{client:c.client,client_tel:c.client_tel,client_email:c.client_email}));
+    if($("cliDel"))$("cliDel").addEventListener("click",async()=>{
+      if(!confirm(`Supprimer définitivement le client « ${c.client} » et ses ${mine.length} commande(s) ?\n\nCette action est irréversible.`))return;
+      try{await api(`/api/clients/${encodeURIComponent(c.client)}`,{method:"DELETE"});closeModal();toast("Client supprimé.");renderClients();}
+      catch(e){toast(e.message,true);}
+    });
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
 }
 async function openCommande(id){
@@ -1265,7 +1271,7 @@ function openNewUser(){
       <div class="field"><label>Nom</label><input id="nuNom" placeholder="Prénom Nom"></div>
       <div class="field"><label>Email</label><input id="nuEmail" type="email" placeholder="employe@traiteur.fr"></div>
       <div class="field"><label>Mot de passe initial</label><input id="nuPwd" type="text" placeholder="À communiquer à la personne"></div>
-      <div class="field"><label>Rôle</label><select id="nuRole"><option value="preparateur">Préparateur</option><option value="cuisinier">Cuisinier</option><option value="chef">Chef cuisinier</option><option value="manager">Gérant</option><option value="admin">Administrateur</option></select></div>
+      <div class="field"><label>Rôle</label><select id="nuRole"><option value="preparateur">Préparateur</option><option value="cuisinier">Cuisinier</option><option value="serveur">Serveur</option><option value="maitre_hotel">Maître d'hôtel</option><option value="chef">Chef cuisinier</option><option value="manager">Gérant</option><option value="admin">Administrateur</option></select></div>
       <button class="btn full" id="nuSave"><span class="spin"></span><span class="label">Créer le compte</span></button>
       <div class="msg err" id="nuMsg"></div></div>`);
   $("nuSave").addEventListener("click",async()=>{
