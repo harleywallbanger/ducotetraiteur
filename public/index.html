@@ -601,6 +601,7 @@ async function openCommande(id){
     try{c.transport=await api(`/api/commandes/${id}/transport`);}catch(_){c.transport=null;}
     try{c.jalons=await api(`/api/commandes/${id}/jalons`);}catch(_){c.jalons=[];}
     try{c.jours=await api(`/api/commandes/${id}/jours`);}catch(_){c.jours=[];}
+    try{c.coches=await api(`/api/commandes/${id}/coches`);}catch(_){c.coches=[];}
     renderCommandeDetail(c);
     markSeen(c.id,c.modifie_le);checkNotifications();
   }catch(e){$("modal").querySelector(".modal-body").innerHTML=`<div class="state"><b>Erreur</b>${esc(e.message)}</div>`;}
@@ -1004,6 +1005,11 @@ function openJoursEditor(c,onDone){
 }
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
+  const cocheSet=new Set((c.coches||[]).map(x=>x.categorie+':'+String(x.ref_id)));
+  const isCoche=(cat,ref)=>cocheSet.has(cat+':'+String(ref));
+  const catTotal=(cat)=>cat==="materiel"?(c.materiel||[]).length:cat==="cuisine"?(c.cuisine||[]).length:(c.boissons_lignes||[]).length;
+  const catDone=(cat)=>{const items=cat==="materiel"?(c.materiel||[]).map(m=>m.materiel_id):cat==="cuisine"?(c.cuisine||[]).map(i=>i.ingredient_id):(c.boissons_lignes||[]).map(b=>b.boisson_id);return items.filter(id=>cocheSet.has(cat+":"+String(id))).length;};
+  const catBadge=(cat,label)=>{const t=catTotal(cat),d=catDone(cat);if(!t)return "";const ok=d===t;return `<span id="catbadge-${cat}" class="pill${ok?"":" pill-alert"}" style="${ok?"background:rgba(31,122,90,.15);color:#1f7a5a":""}">${ok?`Prêt ✓ (${label})`:`${d}/${t}`}</span>`;};
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
   const lignes=(c.lignes||[]).map(l=>`<tr><td>${esc(l.nom)}</td><td class="num">${fmtN(l.nb_personnes)}</td></tr>`).join("")||`<tr><td colspan="2">—</td></tr>`;
   function matSection(){
@@ -1014,21 +1020,16 @@ function renderCommandeDetail(c){
       const qcell=editable
         ? `<input class="qedit" type="number" min="0" step="any" value="${esc(m.quantite)}" data-mat="${m.materiel_id}"> ${esc(m.unite||"")} ${m.ajuste?`<button class="mini rs" title="Revenir au calcul auto" data-rsmat="${m.materiel_id}">↺</button>`:""}`
         : `${fmtN(m.quantite)} ${esc(m.unite||"")}`;
-      return `<tr class="${manqueR>0?"alert":""}"><td>${esc(m.materiel)}${tags}</td><td class="num">${qcell}</td><td class="num">${fmtN(m.stock)}</td><td class="num">${manqueR>0?fmtN(manqueR):"—"}</td></tr>`;}).join("")||`<tr><td colspan="4">Aucun matériel</td></tr>`;
-    return `<h4>Matériel — besoins effectifs${editable?` <span class="ro-note">quantités modifiables</span>`:""}</h4><table class="grid"><thead><tr><th>Matériel</th><th class="num">Besoin</th><th class="num">Stock</th><th class="num">Manque</th></tr></thead><tbody>${rows}</tbody></table>`;
+      return `<tr class="${manqueR>0?"alert":""}"><td class="num"><input type="checkbox" class="coche" data-cat="materiel" data-ref="${m.materiel_id}"${isCoche("materiel",m.materiel_id)?" checked":""}></td><td>${esc(m.materiel)}${tags}</td><td class="num">${qcell}</td><td class="num">${fmtN(m.stock)}</td><td class="num">${manqueR>0?fmtN(manqueR):"—"}</td></tr>`;}).join("")||`<tr><td colspan="5">Aucun matériel</td></tr>`;
+    return `<h4>Matériel — besoins effectifs ${catBadge("materiel","📦")}${editable?` <span class="ro-note">quantités modifiables</span>`:""}</h4><table class="grid"><thead><tr><th>✓</th><th>Matériel</th><th class="num">Besoin</th><th class="num">Stock</th><th class="num">Manque</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
   function cuiSection(){
-    if(cuisineCheck){
-      if(!prepDone[c.id])prepDone[c.id]=new Set();
-      const inner=(c.cuisine||[]).map(i=>{const k="c"+i.ingredient_id;const done=prepDone[c.id].has(k);return `<label class="check ${done?"done":""}" data-key="${k}"><input type="checkbox" ${done?"checked":""}><span>${esc(i.ingredient)}</span><span class="q">${fmtN(i.quantite)} ${esc(i.unite||"")}</span></label>`;}).join("")||`<div class="state">Aucun ingrédient.</div>`;
-      return `<h4>Cuisine — à préparer</h4><div class="progress"><i id="cuiBar" style="width:0%"></i></div><div id="cuiPct" style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px"></div><div id="cuiItems">${inner}</div>`;
-    }
     const rows=(c.cuisine||[]).map(i=>{const tags=`${i.extra?' <span class="pill pill-alert">extra</span>':''}${i.ajuste?' <span class="pill">ajusté</span>':''}`;
       const qcell=editable
         ? `<input class="qedit" type="number" min="0" step="any" value="${esc(i.quantite)}" data-cui="${i.ingredient_id}"> ${esc(i.unite||"")} ${i.ajuste?`<button class="mini rs" title="Revenir au calcul auto" data-rscui="${i.ingredient_id}">↺</button>`:""}`
         : `${fmtN(i.quantite)} ${esc(i.unite||"")}`;
-      return `<tr><td>${esc(i.ingredient)}${tags}</td><td class="num">${qcell}</td></tr>`;}).join("")||`<tr><td colspan="2">Aucun ingrédient</td></tr>`;
-    return `<h4>Cuisine — ingrédients</h4><table class="grid"><thead><tr><th>Ingrédient</th><th class="num">Quantité</th></tr></thead><tbody>${rows}</tbody></table>`;
+      return `<tr><td class="num"><input type="checkbox" class="coche" data-cat="cuisine" data-ref="${i.ingredient_id}"${isCoche("cuisine",i.ingredient_id)?" checked":""}></td><td>${esc(i.ingredient)}${tags}</td><td class="num">${qcell}</td></tr>`;}).join("")||`<tr><td colspan="3">Aucun ingrédient</td></tr>`;
+    return `<h4>Cuisine — produits à préparer ${catBadge("cuisine","🍳")}</h4><table class="grid"><thead><tr><th>✓</th><th>Ingrédient</th><th class="num">Quantité</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
   const sections=cuisineFirst?(cuiSection()+(showMateriel?matSection():"")):((showMateriel?matSection():"")+cuiSection());
   const notesBox=c.notes?`<div style="background:var(--juste-bg);border:1px solid rgba(185,130,28,.35);border-left:4px solid var(--juste);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:14.5px"><b style="display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#7E5A12;margin-bottom:4px">Notes</b>${esc(c.notes)}</div>`:"";
@@ -1038,7 +1039,7 @@ function renderCommandeDetail(c){
   (c.lignes||[]).forEach(l=>{allergKeys(l.allergenes).forEach(k=>cmdAllergKeys.add(k));if(l.allergenes_libre)cmdAllergNotes.push(l.allergenes_libre);});
   const allergBox=(cmdAllergKeys.size||cmdAllergNotes.length)?`<div style="background:#fff;border:1px solid rgba(38,44,42,.15);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:13.5px"><b style="display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px">Allergènes</b>${[...cmdAllergKeys].map(k=>ALLERG_LABEL[k]||k).join(", ")}${cmdAllergNotes.length?`${cmdAllergKeys.size?" · ":""}${cmdAllergNotes.map(esc).join(" · ")}`:""}</div>`:"";
   const bl=c.boissons_lignes||[];
-  const boissonsBox=bl.length?`<h4 style="margin-top:18px">Boissons (sortie / retour)</h4><table class="grid"><thead><tr><th>Boisson</th><th class="num">Sortie</th><th class="num">Retour</th><th class="num">Conso</th></tr></thead><tbody>${bl.map(b=>`<tr><td>${esc(b.nom)}</td><td class="num">${fmtN(b.sortie)}</td><td class="num">${b.retour==null?"—":fmtN(b.retour)}</td><td class="num">${b.conso==null?"—":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>${canAddMateriel()?`<button class="btn sm ghost" id="btnRetour" style="margin-top:8px">Retour J+1…</button>`:""}`:"";
+  const boissonsBox=bl.length?`<h4 style="margin-top:18px">Boissons (sortie / retour) ${catBadge("boisson","🥤")}</h4><table class="grid"><thead><tr><th>✓</th><th>Boisson</th><th class="num">Sortie</th><th class="num">Retour</th><th class="num">Conso</th></tr></thead><tbody>${bl.map(b=>`<tr><td class="num"><input type="checkbox" class="coche" data-cat="boisson" data-ref="${b.boisson_id}"${isCoche("boisson",b.boisson_id)?" checked":""}></td><td>${esc(b.nom)}</td><td class="num">${fmtN(b.sortie)}</td><td class="num">${b.retour==null?"—":fmtN(b.retour)}</td><td class="num">${b.conso==null?"—":fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>${canAddMateriel()?`<button class="btn sm ghost" id="btnRetour" style="margin-top:8px">Retour J+1…</button>`:""}`:"";
   const me=c.materiel_extra||[];
   const materielExtraBox=(me.length||canAddMateriel())?`<h4 style="margin-top:18px">Matériel supplémentaire</h4>${me.length?`<table class="grid"><thead><tr><th>Matériel</th><th class="num">Quantité</th></tr></thead><tbody>${me.map(m=>`<tr><td>${esc(m.materiel)}</td><td class="num">${fmtN(m.quantite)} ${esc(m.unite||"")}</td></tr>`).join("")}</tbody></table>`:`<div class="state" style="padding:6px 0">Aucun matériel supplémentaire.</div>`}${canAddMateriel()?`<button class="btn sm ghost" id="btnMatExtra" style="margin-top:8px">Modifier le matériel supplémentaire</button>`:""}`:"";
   $("modal").innerHTML=`
@@ -1071,12 +1072,6 @@ function renderCommandeDetail(c){
     $("modal").querySelectorAll("[data-rsmat]").forEach(b=>b.addEventListener("click",()=>resetAdjust(c.id,"materiel",b.dataset.rsmat)));
     $("modal").querySelectorAll("[data-rscui]").forEach(b=>b.addEventListener("click",()=>resetAdjust(c.id,"cuisine",b.dataset.rscui)));
   }
-  if(cuisineCheck){
-    const tot=(c.cuisine||[]).length;
-    const refresh=()=>{const dn=prepDone[c.id].size;const bar=$("cuiBar"),pct=$("cuiPct");if(bar)bar.style.width=(tot?Math.round(dn/tot*100):0)+"%";if(pct)pct.textContent=tot?(dn===tot?"✓ Tout est prêt":`${dn} / ${tot} préparés`):"";};
-    $("modal").querySelectorAll("#cuiItems .check").forEach(l=>l.querySelector("input").addEventListener("change",(e)=>{const k=l.dataset.key;if(e.target.checked)prepDone[c.id].add(k);else prepDone[c.id].delete(k);l.classList.toggle("done",e.target.checked);refresh();}));
-    refresh();
-  }
   if(canOps()){$("editCmd").addEventListener("click",()=>openCommandeForm(c));$("delCmd").addEventListener("click",()=>deleteCommande(c.id));}
   $("prCuisine").addEventListener("click",()=>printFiche(c,"cuisine"));
   $("prMateriel").addEventListener("click",()=>printFiche(c,"materiel"));
@@ -1089,6 +1084,15 @@ function renderCommandeDetail(c){
   if($("btnBilan"))$("btnBilan").addEventListener("click",()=>openBilanEditor(c,()=>openCommande(c.id)));
   if($("btnJours"))$("btnJours").addEventListener("click",()=>openJoursEditor(c,()=>openCommande(c.id)));
   $("modal").querySelectorAll("[data-jalon]").forEach(b=>b.addEventListener("click",()=>toggleJalon(c,b.dataset.jalon,b.dataset.fait!=="1")));
+  function updateCatBadge(cat){const el=$("catbadge-"+cat);if(!el)return;const t=catTotal(cat),d=catDone(cat),ok=t&&d===t;el.textContent=ok?`Prêt ✓ (${cat==="materiel"?"📦":cat==="cuisine"?"🍳":"🥤"})`:`${d}/${t}`;el.className="pill"+(ok?"":" pill-alert");el.style.cssText=ok?"background:rgba(31,122,90,.15);color:#1f7a5a":"";}
+  $("modal").querySelectorAll("input.coche").forEach(inp=>inp.addEventListener("change",async()=>{
+    const cat=inp.dataset.cat,ref=inp.dataset.ref,on=inp.checked,key=cat+":"+ref;
+    try{await api(`/api/commandes/${c.id}/coche`,{method:"PUT",body:{categorie:cat,ref_id:Number(ref),coche:on}});if(on)cocheSet.add(key);else cocheSet.delete(key);}
+    catch(e){toast(e.message,true);inp.checked=!on;return;}
+    updateCatBadge(cat);
+    const jmap={cuisine:"cuisine",materiel:"materiel"};
+    if(on&&jmap[cat]&&catTotal(cat)&&catDone(cat)===catTotal(cat)){try{await api(`/api/commandes/${c.id}/jalons/${jmap[cat]}`,{method:"PUT",body:{fait:true}});toast((cat==="cuisine"?"🍳 Cuisine prête":"📦 Matériel prêt")+" — jalon validé");openCommande(c.id);}catch(_){}}
+  }));
   wireSortie(c,()=>openCommande(c.id));
 }
 

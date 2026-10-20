@@ -605,4 +605,26 @@ router.put('/commandes/:id/jours', requireMaterielEditor, ah(async (req, res) =>
   res.json({ ok: true });
 }));
 
+/* ---- Préparation : cases cochées par article (matériel / cuisine / boisson) ---- */
+router.get('/commandes/:id/coches', ah(async (req, res) => {
+  const { rows } = await pool.query('SELECT categorie, ref_id FROM commande_coche WHERE commande_id = $1', [req.params.id]);
+  res.json(rows);
+}));
+router.put('/commandes/:id/coche', ah(async (req, res) => {
+  const b = req.body || {};
+  const cat = String(b.categorie || '');
+  const ref = parseInt(b.ref_id, 10);
+  if (!['materiel', 'cuisine', 'boisson'].includes(cat) || Number.isNaN(ref))
+    return res.status(400).json({ error: 'categorie/ref_id invalide' });
+  if (b.coche) {
+    await pool.query(
+      `INSERT INTO commande_coche (commande_id, categorie, ref_id, coche_par) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (commande_id, categorie, ref_id) DO UPDATE SET coche_par = EXCLUDED.coche_par, coche_le = now()`,
+      [req.params.id, cat, ref, req.user.nom || null]);
+  } else {
+    await pool.query('DELETE FROM commande_coche WHERE commande_id=$1 AND categorie=$2 AND ref_id=$3', [req.params.id, cat, ref]);
+  }
+  res.json({ ok: true });
+}));
+
 module.exports = router;
