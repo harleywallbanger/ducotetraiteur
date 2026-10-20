@@ -9,6 +9,7 @@ const connectionString =
   process.env.POSTGRESQL_ADDON_URI ||
   'postgres://postgres:postgres@localhost:5432/traiteur'; // défaut local
 
-const pool = new Pool({ connectionString, max: 4 });
+// Plan dédié XXS (45 connexions dispo) → pool remonté (était 4 sous le plan DEV / 5 connexions)
+const pool = new Pool({ connectionString, max: 10 });
 
 module.exports = { pool };
