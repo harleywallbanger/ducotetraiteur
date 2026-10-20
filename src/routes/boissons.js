@@ -488,4 +488,14 @@ router.delete('/personnel/:id', requireMaterielEditor, ah(async (req, res) => {
   res.status(204).end();
 }));
 
+/* ---- Fiche événement : bilan linge + remarques (boissons = conso auto) ---- */
+router.put('/commandes/:id/bilan', requireMaterielEditor, ah(async (req, res) => {
+  const clean = (v) => (v != null && String(v).trim() !== '') ? String(v).trim() : null;
+  const { rows } = await pool.query(
+    'UPDATE commandes SET bilan_linge=$1, remarques_event=$2 WHERE id=$3 RETURNING id',
+    [clean(req.body && req.body.bilan_linge), clean(req.body && req.body.remarques_event), req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable' });
+  res.json({ ok: true });
+}));
+
 module.exports = router;

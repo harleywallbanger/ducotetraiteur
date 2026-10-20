@@ -731,6 +731,31 @@ function horairesBox(c){
   let tp="";if(start!=null&&end!=null){tp=`<div class="ro-note" style="margin-top:6px;display:inline-block">Temps passé : <b>${fmtDuree(end-start)}</b> (du 1ᵉʳ départ au retour)</div>`;}
   return `<h4 style="margin-top:18px">Horaires</h4><table class="grid"><tbody>${rows}</tbody></table>${tp}`;
 }
+/* ---- Fiche événement : bilan boissons (conso) + linge + remarques ---- */
+function ficheEvenementBox(c){
+  const can=canAddMateriel();
+  const bl=(c.boissons_lignes||[]).filter(b=>b.conso!=null&&Number(b.conso)>0);
+  const boissonsBilan=bl.length
+    ? `<table class="grid"><thead><tr><th>Boisson</th><th class="num">Consommé</th></tr></thead><tbody>${bl.map(b=>`<tr><td>${esc(b.nom)}</td><td class="num">${fmtN(b.conso)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="state" style="padding:6px 0">Consommation boissons non encore établie (saisir les retours J+1).</div>`;
+  const linge=c.bilan_linge?`<div style="margin-top:10px"><b>Linge utilisé :</b> ${esc(c.bilan_linge)}</div>`:`<div class="ro-note" style="margin-top:10px">Linge utilisé : non renseigné.</div>`;
+  const rem=c.remarques_event?`<div style="margin-top:6px"><b>Remarques :</b> ${esc(c.remarques_event)}</div>`:"";
+  return `<h4 style="margin-top:18px">Fiche événement — bilan</h4><div class="ro-note" style="margin-bottom:6px">Boissons consommées (sortie − retour)</div>${boissonsBilan}${linge}${rem}${can?`<div style="margin-top:8px"><button class="btn sm ghost" id="btnBilan">Modifier le bilan (linge, remarques)…</button></div>`:""}`;
+}
+function openBilanEditor(c,onDone){
+  openModal(`<div class="modal-head"><div><h3>Fiche événement</h3><div class="meta">${esc(c.client||"Commande")}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Linge utilisé (effectif)</label><textarea id="biLinge" placeholder="ex. 80 nappes, 200 serviettes, 12 housses…">${c.bilan_linge?esc(c.bilan_linge):""}</textarea></div>
+      <div class="field"><label>Remarques complémentaires</label><textarea id="biRem" placeholder="Incidents, retours client, casse, à prévoir la prochaine fois…">${c.remarques_event?esc(c.remarques_event):""}</textarea></div>
+      <button class="btn full" id="biSave"><span class="spin"></span><span class="label">Enregistrer le bilan</span></button>
+      <div class="msg err" id="biMsg"></div></div>`);
+  $("biSave").addEventListener("click",async()=>{
+    const m=$("biMsg");m.classList.remove("show");
+    const btn=$("biSave");btn.classList.add("loading");btn.disabled=true;
+    try{await api(`/api/commandes/${c.id}/bilan`,{method:"PUT",body:{bilan_linge:$("biLinge").value.trim()||null,remarques_event:$("biRem").value.trim()||null}});toast("Bilan enregistré.");if(typeof onDone==="function")onDone();else closeModal();}
+    catch(e){m.textContent=e.message;m.classList.add("show");}finally{btn.classList.remove("loading");btn.disabled=false;}
+  });
+}
 function renderCommandeDetail(c){
   const dt=parseDate(c.date_event);const editable=canRecipes();const r=role();
   const showMateriel=r!=="cuisinier";const cuisineFirst=(r==="chef"||r==="cuisinier");const cuisineCheck=(r==="cuisinier");
@@ -786,6 +811,7 @@ function renderCommandeDetail(c){
       ${materielSortieBox(c)}
       ${transportBox(c)}
       ${horairesBox(c)}
+      ${ficheEvenementBox(c)}
       <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" id="prCuisine">🖨 Cuisine</button><button class="btn sm ghost" id="prMateriel">🖨 Matériel</button><button class="btn sm ghost" id="prAllerg">🖨 Allergènes</button><button class="btn sm" id="prAll">🖨 Tout imprimer</button></div>
       ${canOps()?`<div style="margin-top:12px;display:flex;gap:10px"><button class="btn sm" id="editCmd">Modifier la commande</button><button class="btn danger sm" id="delCmd">Supprimer</button></div>`:""}
     </div>`;
@@ -810,6 +836,7 @@ function renderCommandeDetail(c){
   if($("btnMatExtra"))$("btnMatExtra").addEventListener("click",()=>openMaterielExtraEditor(c,()=>openCommande(c.id)));
   if($("btnLocation"))$("btnLocation").addEventListener("click",()=>openLocationEditor(c,()=>openCommande(c.id)));
   if($("btnTransport"))$("btnTransport").addEventListener("click",()=>openTransportEditor(c,()=>openCommande(c.id)));
+  if($("btnBilan"))$("btnBilan").addEventListener("click",()=>openBilanEditor(c,()=>openCommande(c.id)));
   wireSortie(c,()=>openCommande(c.id));
 }
 

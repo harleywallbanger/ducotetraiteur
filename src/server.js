@@ -64,6 +64,8 @@ const { pool: _migPool } = require('./db');
       "CREATE TABLE IF NOT EXISTS commande_materiel_sortie (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, materiel_id INTEGER NOT NULL REFERENCES materiels(id) ON DELETE CASCADE, quantite NUMERIC NOT NULL DEFAULT 0, sorti_le DATE, recupere_le DATE, PRIMARY KEY (commande_id, materiel_id))",
       "CREATE TABLE IF NOT EXISTS commande_materiel_location (commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE, materiel_id INTEGER NOT NULL REFERENCES materiels(id) ON DELETE CASCADE, quantite NUMERIC NOT NULL DEFAULT 0, fournisseur TEXT, PRIMARY KEY (commande_id, materiel_id))",
       "CREATE TABLE IF NOT EXISTS camions (id SERIAL PRIMARY KEY, nom TEXT NOT NULL, hayon BOOLEAN DEFAULT false, frigo BOOLEAN DEFAULT false, capacite TEXT)",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS bilan_linge TEXT",
+      "ALTER TABLE commandes ADD COLUMN IF NOT EXISTS remarques_event TEXT",
       "ALTER TABLE recettes ADD COLUMN IF NOT EXISTS photo TEXT",
       "CREATE TABLE IF NOT EXISTS personnel (id SERIAL PRIMARY KEY, nom TEXT NOT NULL, fonction TEXT, tel TEXT, photo TEXT, actif BOOLEAN DEFAULT true)",
       "ALTER TABLE materiels ADD COLUMN IF NOT EXISTS photo TEXT",
