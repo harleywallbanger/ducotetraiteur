@@ -37,7 +37,7 @@ router.put('/boissons/:id/stock', requireMaterielEditor, ah(async (req, res) => 
 /* ---------- Lignes boissons d'une commande ---------- */
 router.get('/commandes/:id/boissons', ah(async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT cb.boisson_id, b.nom, b.unite, b.stock, cb.sortie, cb.retour
+    `SELECT cb.boisson_id, b.nom, b.unite, b.stock, cb.sortie, cb.retour, cb.jour_id
      FROM commande_boissons cb
      JOIN boissons b ON b.id = cb.boisson_id
      WHERE cb.commande_id = $1
@@ -62,15 +62,16 @@ router.put('/commandes/:id/boissons', requireMaterielEditor, ah(async (req, res)
     for (const l of lignes) {
       const bid = parseInt(l.boisson_id, 10);
       const sortie = parseInt(l.sortie, 10) || 0;
+      const jour_id = (l.jour_id != null && l.jour_id !== '') ? parseInt(l.jour_id, 10) : null;
       if (Number.isNaN(bid)) continue;
       keep.push(bid);
       await client.query(
-        `INSERT INTO commande_boissons (commande_id, boisson_id, sortie)
-         VALUES ($1, $2, $3)
+        `INSERT INTO commande_boissons (commande_id, boisson_id, sortie, jour_id)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT (commande_id, boisson_id)
-         DO UPDATE SET sortie = EXCLUDED.sortie
+         DO UPDATE SET sortie = EXCLUDED.sortie, jour_id = EXCLUDED.jour_id
          WHERE commande_boissons.retour IS NULL`,
-        [cid, bid, sortie]
+        [cid, bid, sortie, jour_id]
       );
     }
     // Retire les lignes décochées (uniquement celles sans retour saisi)

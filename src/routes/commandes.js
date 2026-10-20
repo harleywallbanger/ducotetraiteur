@@ -30,7 +30,7 @@ router.get('/:id', ah(async (req, res) => {
   if (!c[0]) return res.status(404).json({ error: 'Commande introuvable' });
 
   const { rows: lignes } = await pool.query(
-    `SELECT cr.recette_id, r.nom, r.allergenes, r.allergenes_libre, cr.nb_personnes
+    `SELECT cr.recette_id, r.nom, r.allergenes, r.allergenes_libre, cr.nb_personnes, cr.jour_id
        FROM commande_recettes cr JOIN recettes r ON r.id = cr.recette_id
       WHERE cr.commande_id = $1 ORDER BY r.nom`, [id]);
 
@@ -79,8 +79,8 @@ router.post('/', requireManager, ah(async (req, res) => {
       [clientNom, client_tel, client_email, date_event, couverts, notes, adresse, lieu_descriptif, contact_nom, contact_tel, lieu_id || null, req.user.id, req.user.nom || null]);
     for (const l of lignes)
       await cx.query(
-        'INSERT INTO commande_recettes (commande_id, recette_id, nb_personnes) VALUES ($1, $2, $3)',
-        [rows[0].id, l.recette_id, l.nb_personnes]);
+        'INSERT INTO commande_recettes (commande_id, recette_id, nb_personnes, jour_id) VALUES ($1, $2, $3, $4)',
+        [rows[0].id, l.recette_id, l.nb_personnes, l.jour_id || null]);
     await cx.query('COMMIT');
     res.status(201).json(rows[0]);
   } catch (e) {
@@ -105,8 +105,8 @@ router.put('/:id', requireManager, ah(async (req, res) => {
       await cx.query('DELETE FROM commande_recettes WHERE commande_id = $1', [req.params.id]);
       for (const l of lignes)
         await cx.query(
-          'INSERT INTO commande_recettes (commande_id, recette_id, nb_personnes) VALUES ($1, $2, $3)',
-          [req.params.id, l.recette_id, l.nb_personnes]);
+          'INSERT INTO commande_recettes (commande_id, recette_id, nb_personnes, jour_id) VALUES ($1, $2, $3, $4)',
+          [req.params.id, l.recette_id, l.nb_personnes, l.jour_id || null]);
     }
     await cx.query('COMMIT');
     res.json(rows[0]);
