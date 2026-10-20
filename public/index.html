@@ -242,6 +242,7 @@ const TABS=[
   {id:"calendrier",label:"Calendrier",roles:["admin","manager","chef","cuisinier","preparateur","maitre_hotel","serveur"]},
   {id:"clients",label:"Clients",roles:["admin","manager","maitre_hotel","serveur"]},
   {id:"stock",label:"Stock & alertes",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
+  {id:"appros",label:"Appros",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
   {id:"recettes",label:"Recettes",roles:["admin","manager","chef","cuisinier","maitre_hotel","serveur"]},
   {id:"personnel",label:"Personnel",roles:["admin","manager","maitre_hotel","serveur"]},
   {id:"admin",label:"Administration",roles:["admin","manager"]},
@@ -342,7 +343,43 @@ function renderNotifBar(changed){
 $("tabs").addEventListener("click",(e)=>{const b=e.target.closest("button[data-view]");if(b)switchView(b.dataset.view);});
 function switchView(view){
   [...$("tabs").children].forEach(b=>b.classList.toggle("active",b.dataset.view===view));
-  ({commandes:renderCommandes,calendrier:renderCalendrier,clients:renderClients,stock:renderStock,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+  ({commandes:renderCommandes,calendrier:renderCalendrier,clients:renderClients,stock:renderStock,appros:renderAppros,recettes:renderRecettes,personnel:renderPersonnel,admin:renderAdmin,prep:renderPrep}[view]||(()=>{}))();
+}
+
+/* ---------- APPROS (anticipation) ---------- */
+function addDaysStr(base,n){const d=new Date(base);d.setDate(d.getDate()+n);const p=x=>String(x).padStart(2,"0");return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;}
+let approRange=null;
+async function renderAppros(){
+  const today=addDaysStr(new Date(),0);
+  if(!approRange)approRange={from:today,to:addDaysStr(new Date(),30)};
+  $("content").innerHTML=`<div class="head"><h2>Approvisionnements à prévoir</h2><div class="tools">
+      <span class="filter">Du <input type="date" id="apFrom" value="${approRange.from}"> au <input type="date" id="apTo" value="${approRange.to}"></span>
+      <button class="btn sm ghost" data-ap="7">7 j</button><button class="btn sm ghost" data-ap="30">30 j</button><button class="btn sm ghost" data-ap="90">90 j</button>
+    </div></div>
+    <div class="ro-note" style="margin-bottom:10px">Basé sur les commandes de la période : boissons planifiées (sorties) et linge (matériels nappes/serviettes/torchon/housse) non encore servis, comparés au stock.</div>
+    <div id="apBox"><div class="state">Chargement…</div></div>`;
+  const reload=()=>{approRange.from=$("apFrom").value;approRange.to=$("apTo").value;loadAppros();};
+  $("apFrom").addEventListener("change",reload);$("apTo").addEventListener("change",reload);
+  $("content").querySelectorAll("[data-ap]").forEach(b=>b.addEventListener("click",()=>{approRange.from=addDaysStr(new Date(),0);approRange.to=addDaysStr(new Date(),Number(b.dataset.ap));$("apFrom").value=approRange.from;$("apTo").value=approRange.to;loadAppros();}));
+  loadAppros();
+}
+async function loadAppros(){
+  const box=$("apBox");if(!box)return;box.innerHTML=`<div class="state">Chargement…</div>`;
+  let d;try{d=await api(`/api/appros?from=${approRange.from}&to=${approRange.to}`);}catch(e){box.innerHTML=`<div class="state"><b>Lecture impossible</b>${esc(e.message)}</div>`;return;}
+  const fmtEch=v=>{const dt=parseDate(v);return dt?dt.toLocaleDateString("fr-FR",{day:"numeric",month:"short"}):"—";};
+  const tbl=(rows,labelVide)=>{
+    if(!rows.length)return `<div class="state" style="padding:10px 0">${labelVide}</div>`;
+    const body=rows.map(r=>{const manque=Number(r.a_prevoir)>0;
+      return `<tr class="${manque?"alert":""}"><td>${esc(r.nom)}</td><td class="num">${fmtN(r.besoin)} ${esc(r.unite||"")}</td><td class="num">${fmtN(r.stock)}</td><td class="num">${manque?`<b>${fmtN(r.a_prevoir)}</b>`:"—"}</td><td class="num">${fmtEch(r.echeance)}</td><td class="num">${r.nb_commandes}</td></tr>`;}).join("");
+    return `<table class="grid"><thead><tr><th>Article</th><th class="num">Besoin</th><th class="num">Stock</th><th class="num">À prévoir</th><th class="num">1ʳᵉ échéance</th><th class="num">Cdes</th></tr></thead><tbody>${body}</tbody></table>`;
+  };
+  const nbB=d.boissons.filter(r=>Number(r.a_prevoir)>0).length;
+  const nbL=d.linge.filter(r=>Number(r.a_prevoir)>0).length;
+  box.innerHTML=`
+    <h3 style="margin:8px 0 6px">🥤 Boissons à commander ${nbB?`<span class="pill pill-alert">${nbB} à commander</span>`:`<span class="pill">à jour</span>`}</h3>
+    ${tbl(d.boissons,"Aucune boisson planifiée sur cette période.")}
+    <h3 style="margin:22px 0 6px">🧺 Linge à prévoir ${nbL?`<span class="pill pill-alert">${nbL} à prévoir</span>`:`<span class="pill">à jour</span>`}</h3>
+    ${tbl(d.linge,"Aucun linge sur cette période.")}`;
 }
 
 /* ---------- CALENDRIER ---------- */

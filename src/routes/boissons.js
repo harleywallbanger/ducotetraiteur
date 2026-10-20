@@ -528,4 +528,50 @@ router.put('/commandes/:id/jalons/:jalon', ah(async (req, res) => {
   res.json(rows[0]);
 }));
 
+/* ---- Anticipation des approvisionnements (boissons à commander + linge à prévoir) ---- */
+router.get('/appros', ah(async (req, res) => {
+  const from = (req.query.from && String(req.query.from)) || new Date().toISOString().slice(0, 10);
+  const to = (req.query.to && String(req.query.to)) || null;
+  const params = [from];
+  let dateCond = 'c.date_event >= $1';
+  if (to) { params.push(to); dateCond += ' AND c.date_event <= $2'; }
+
+  // Boissons : somme des sorties planifiées (pas encore retournées) vs stock
+  const { rows: boissons } = await pool.query(
+    `SELECT b.id, b.nom, b.unite, b.stock,
+            SUM(cb.sortie) AS besoin,
+            MIN(c.date_event) AS echeance,
+            COUNT(DISTINCT c.id) AS nb_commandes
+       FROM commande_boissons cb
+       JOIN commandes c ON c.id = cb.commande_id
+       JOIN boissons b ON b.id = cb.boisson_id
+      WHERE ${dateCond} AND cb.retour IS NULL AND cb.sortie > 0
+      GROUP BY b.id, b.nom, b.unite, b.stock
+     HAVING SUM(cb.sortie) > 0
+      ORDER BY b.nom`, params);
+
+  // Linge : besoins effectifs des matériels de type linge (repérés par nom) vs stock
+  const { rows: linge } = await pool.query(
+    `SELECT e.materiel_id, e.materiel AS nom, e.unite,
+            MAX(e.stock) AS stock,
+            SUM(e.quantite) AS besoin,
+            MIN(c.date_event) AS echeance,
+            COUNT(DISTINCT c.id) AS nb_commandes
+       FROM besoins_materiel_effectif e
+       JOIN commandes c ON c.id = e.commande_id
+      WHERE ${dateCond}
+        AND (e.materiel ILIKE '%nappe%' OR e.materiel ILIKE '%serviette%'
+          OR e.materiel ILIKE '%torchon%' OR e.materiel ILIKE '%housse%'
+          OR e.materiel ILIKE '%nappage%' OR e.materiel ILIKE '%linge%')
+      GROUP BY e.materiel_id, e.materiel, e.unite
+     HAVING SUM(e.quantite) > 0
+      ORDER BY e.materiel`, params);
+
+  const enrich = r => {
+    const besoin = Number(r.besoin) || 0, stock = Number(r.stock) || 0;
+    return { ...r, besoin, stock, a_prevoir: Math.max(besoin - stock, 0) };
+  };
+  res.json({ from, to, boissons: boissons.map(enrich), linge: linge.map(enrich) });
+}));
+
 module.exports = router;
