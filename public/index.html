@@ -232,7 +232,7 @@ const role=()=> session.user ? session.user.role : null;
 const isAdmin=()=> role()==="admin";
 const canAccounts=()=> role()==="admin"||role()==="manager";
 const canOps=()=>["manager","maitre_hotel","serveur"].includes(role());                       // commandes, stock
-const canRecipes=()=>["manager","chef","maitre_hotel","serveur"].includes(role());  // recettes + quantités
+const canRecipes=()=>["admin","manager","chef","maitre_hotel","serveur"].includes(role());  // recettes + quantités
 const canAddMateriel=()=>["admin","manager","preparateur","maitre_hotel","serveur"].includes(role());  // créer/gérer matériel + stock
 const canAddIngredient=()=>["admin","manager","chef","maitre_hotel","serveur"].includes(role());        // créer ingrédients (cuisine)
 

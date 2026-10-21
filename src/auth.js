@@ -36,7 +36,7 @@ function requireManager(req, res, next) {
 
 // Réserve une route à l'édition des recettes/ajustements (gérant, chef, maître d'hôtel, serveur)
 function requireRecipeEditor(req, res, next) {
-  if (!req.user || !['manager', 'chef', 'maitre_hotel', 'serveur'].includes(req.user.role))
+  if (!req.user || !['admin', 'manager', 'chef', 'maitre_hotel', 'serveur'].includes(req.user.role))
     return res.status(403).json({ error: "Action réservée au gérant ou au chef" });
   next();
 }
