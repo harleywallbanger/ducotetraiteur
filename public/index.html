@@ -231,7 +231,7 @@ let session={token:null,user:null};
 const role=()=> session.user ? session.user.role : null;
 const isAdmin=()=> role()==="admin";
 const canAccounts=()=> role()==="admin"||role()==="manager";
-const canOps=()=>["manager","maitre_hotel","serveur"].includes(role());                       // commandes, stock
+const canOps=()=>["admin","manager","maitre_hotel","serveur"].includes(role());                       // commandes, stock
 const canRecipes=()=>["admin","manager","chef","maitre_hotel","serveur"].includes(role());  // recettes + quantités
 const canAddMateriel=()=>["admin","manager","preparateur","maitre_hotel","serveur"].includes(role());  // créer/gérer matériel + stock
 const canAddIngredient=()=>["admin","manager","chef","maitre_hotel","serveur"].includes(role());        // créer ingrédients (cuisine)
@@ -253,7 +253,7 @@ const TABS=[
   {id:"personnel",label:"Personnel",roles:["admin","manager","maitre_hotel","serveur"]},
   {id:"lieux",label:"Lieux",roles:["admin","manager","chef","preparateur","maitre_hotel","serveur"]},
   {id:"admin",label:"Administration",roles:["admin","manager"]},
-  {id:"prep",label:"Préparation",roles:["chef","preparateur","maitre_hotel","serveur"]},
+  {id:"prep",label:"Préparation",roles:["admin","chef","preparateur","maitre_hotel","serveur"]},
 ];
 
 const MOIS=["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"];

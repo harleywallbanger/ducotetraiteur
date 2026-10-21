@@ -29,7 +29,7 @@ const PLEIN_ACCES = ['manager', 'maitre_hotel', 'serveur'];
 
 // Réserve une route au rôle gérant (et maître d'hôtel / serveur)
 function requireManager(req, res, next) {
-  if (!req.user || !PLEIN_ACCES.includes(req.user.role))
+  if (!req.user || !(req.user.role === 'admin' || PLEIN_ACCES.includes(req.user.role)))
     return res.status(403).json({ error: 'Action réservée au gérant' });
   next();
 }
